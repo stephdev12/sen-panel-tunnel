@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "servers": {
+    "SEN": {
+      "name": "Serveur Principal SEN",
+      "api": [
+        "https://panel.senstudio.space:2045"
+      ]
+    }
+  }
+}
