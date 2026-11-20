@@ -19,57 +19,9 @@ function actorFrom(req) {
 router.get('/', (req, res) => {
   const resellers = db.prepare('SELECT * FROM resellers ORDER BY created_at DESC').all();
   const enriched = resellers.map((r) => ({ ...r, stats: quota.getResellerStats(r) }));
-
-  // Read raw system SSH users from /etc/novaxtunnel/users.db
-  let rawUsers = [];
-  try {
-    rawUsers = system.readUsersDb();
-  } catch (err) {
-    console.warn('[Admin] readUsersDb error:', err.message);
-  }
-
-  let onlineCounts = new Map();
-  try {
-    onlineCounts = system.getOnlineSshCounts();
-  } catch (err) {
-    console.warn('[Admin] getOnlineSshCounts error:', err.message);
-  }
-
-  const systemUsers = rawUsers.map((u) => {
-    const usedBytes = system.readSshUsageBytes(u.username);
-    const usedGb = usedBytes / (1024 * 1024 * 1024);
-    const quotaGb = u.bandwidthGb && parseFloat(u.bandwidthGb) > 0 ? parseFloat(u.bandwidthGb) : null;
-    const isExpired = u.expireDate ? new Date(u.expireDate) < new Date() : false;
-    const online = onlineCounts.get(u.username) || 0;
-    const percentUsed = (quotaGb && quotaGb > 0) ? Math.min(100, Math.round((usedGb / quotaGb) * 100)) : null;
-
-    return {
-      username: u.username,
-      password: u.password,
-      expireDate: u.expireDate || null,
-      connLimit: parseInt(u.connLimit, 10) || 1,
-      quotaGb,
-      usedBytes,
-      usedGb,
-      percentUsed,
-      online,
-      isExpired
-    };
-  });
-
-  const totalSshOnline = Array.from(onlineCounts.values()).reduce((a, b) => a + b, 0);
-  const totalSshConsumedGb = systemUsers.reduce((sum, u) => sum + u.usedGb, 0);
-  const hasUnlimitedQuota = systemUsers.some((u) => u.quotaGb == null);
-  const totalSshQuotaGb = systemUsers.reduce((sum, u) => sum + (u.quotaGb || 0), 0);
-
   const activity = audit.recent(null, 10);
   res.render('admin/dashboard', {
     resellers: enriched,
-    systemUsers,
-    totalSshOnline,
-    totalSshConsumedGb,
-    hasUnlimitedQuota,
-    totalSshQuotaGb,
     protocols: config.PROTOCOLS,
     activity,
     error: req.query.error,

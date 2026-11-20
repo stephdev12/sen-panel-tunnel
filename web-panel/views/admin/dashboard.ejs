@@ -16,137 +16,32 @@
 
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-label">👥 Utilisateurs SSH</div>
-        <div class="stat-value"><%= systemUsers.length %></div>
-        <div class="muted" style="font-size:11px; margin-top:4px;"><%= systemUsers.filter(u => !u.isExpired).length %> actifs</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">🟢 En ligne (SSH)</div>
-        <div class="stat-value" style="color: #10b981;"><%= totalSshOnline %></div>
-        <div class="muted" style="font-size:11px; margin-top:4px;">connexions actives</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">📊 Bande passante consommée</div>
-        <div class="stat-value accent">
-          <%= fmtData(totalSshConsumedGb) %> / <%= hasUnlimitedQuota ? '∞' : fmtData(totalSshQuotaGb) %>
-        </div>
-        <div class="muted" style="font-size:11px; margin-top:4px;">données totales utilisées</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">💼 <%= t('dash.admin.stat.resellers') %></div>
+        <div class="stat-label"><%= t('dash.admin.stat.resellers') %></div>
         <div class="stat-value"><%= resellers.length %></div>
-        <div class="muted" style="font-size:11px; margin-top:4px;"><%= resellers.filter(r => r.status === 'active').length %> actifs</div>
       </div>
-    </div>
-
-    <!-- ---- Utilisateurs SSH du Serveur ---- -->
-    <div class="panel">
-      <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-        <div>
-          <h2>👥 Utilisateurs SSH du Serveur (<%= systemUsers.length %>)</h2>
-          <p class="muted" style="margin:4px 0 0; font-size:13px;">Comptes SSH système (/etc/novaxtunnel/users.db) & quotas de consommation</p>
+      <div class="stat-card">
+        <div class="stat-label"><%= t('dash.admin.stat.active') %></div>
+        <div class="stat-value" style="color: var(--success);"><%= resellers.filter(r => r.status === 'active').length %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><%= t('dash.admin.stat.locked') %></div>
+        <div class="stat-value" style="color: var(--warning);"><%= resellers.filter(r => r.status !== 'active').length %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><%= t('dash.admin.stat.online_total') %></div>
+        <div class="stat-value accent"><%= resellers.reduce((a, r) => a + r.stats.onlineClientCount, 0) %> / <%= resellers.reduce((a, r) => a + r.max_users, 0) %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><%= t('dash.admin.stat.quota_total') %></div>
+        <div class="stat-value accent">
+          <%
+            const totalConsumed = resellers.reduce((a, r) => a + r.stats.consumedTotalGb, 0);
+            const hasUnlimited = resellers.some((r) => r.data_quota_gb == null);
+            const totalQuota = resellers.reduce((a, r) => a + (r.data_quota_gb || 0), 0);
+          %>
+          <%= fmtData(totalConsumed) %> / <%= hasUnlimited ? '∞' : fmtData(totalQuota) %>
         </div>
-        <button class="btn small" type="button" onclick="const f=document.getElementById('createUserForm'); f.style.display=(f.style.display==='none'?'block':'none');">
-          + Ajouter un compte SSH
-        </button>
       </div>
-
-      <!-- Formulaire d'ajout rapide (collapsible) -->
-      <div id="createUserForm" style="display:none; background:var(--bg-card); padding:16px; border-radius:8px; border:1px solid var(--border); margin:12px 0 16px;">
-        <h3 style="margin-top:0; margin-bottom:12px; font-size:15px; color:var(--accent);">Créer un nouvel utilisateur SSH</h3>
-        <form method="POST" action="/admin/users/create">
-          <div class="grid-2">
-            <div>
-              <label>Nom d'utilisateur</label>
-              <input type="text" name="username" required placeholder="ex: client1">
-            </div>
-            <div>
-              <label>Mot de passe</label>
-              <input type="text" name="password" required placeholder="Mot de passe SSH">
-            </div>
-          </div>
-          <div class="grid-3" style="margin-top:8px;">
-            <div>
-              <label>Limite connexions simultanées</label>
-              <input type="number" name="conn_limit" value="1" min="1">
-            </div>
-            <div>
-              <label>Quota Bande Passante (Go)</label>
-              <input type="number" step="0.1" name="bandwidth_gb" placeholder="Laisser vide pour illimité">
-            </div>
-            <div>
-              <label>Date d'expiration</label>
-              <input type="date" name="expiry_date">
-            </div>
-          </div>
-          <button class="btn small" type="submit" style="margin-top:12px;">Enregistrer l'utilisateur</button>
-        </form>
-      </div>
-
-      <% if (systemUsers.length === 0) { %>
-        <div class="empty-state">Aucun utilisateur SSH trouvé sur le système.</div>
-      <% } else { %>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Utilisateur</th>
-              <th>En ligne</th>
-              <th>Consommation / Quota</th>
-              <th>Expiration</th>
-              <th>Statut</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% systemUsers.forEach(u => { %>
-            <tr>
-              <td>
-                <b style="font-size:14px;"><%= u.username %></b>
-                <div class="muted mono" style="font-size:11px;">MDP: <%= u.password %></div>
-              </td>
-              <td>
-                <% if (u.online > 0) { %>
-                  <span class="pill active" style="font-weight:600;"><span style="color:#10b981;">●</span> <%= u.online %> / <%= u.connLimit %></span>
-                <% } else { %>
-                  <span class="mono muted">0 / <%= u.connLimit %></span>
-                <% } %>
-              </td>
-              <td class="mono" style="min-width:180px;">
-                <div style="font-size:13px; font-weight:600; margin-bottom:4px;">
-                  <%= fmtData(u.usedGb) %> / <%= u.quotaGb ? fmtData(u.quotaGb) : '∞ Illimité' %>
-                </div>
-                <% if (u.quotaGb && u.quotaGb > 0) { %>
-                  <div style="height:6px; background:var(--surface-alt, #1f2937); border-radius:3px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
-                    <div style="height:100%; width:<%= u.percentUsed %>%; background:<%= u.percentUsed >= 90 ? '#ef4444' : (u.percentUsed >= 70 ? '#f59e0b' : 'var(--accent, #22d3ee)') %>;"></div>
-                  </div>
-                  <div class="muted" style="font-size:10px; margin-top:2px;"><%= u.percentUsed %>% consommé</div>
-                <% } %>
-              </td>
-              <td class="mono" style="font-size:13px;">
-                <%= u.expireDate || 'Illimité' %>
-              </td>
-              <td>
-                <% if (u.isExpired) { %>
-                  <span class="pill locked_expired">Expiré</span>
-                <% } else { %>
-                  <span class="pill active">Actif</span>
-                <% } %>
-              </td>
-              <td style="white-space:nowrap;">
-                <form method="POST" action="/admin/users/<%= encodeURIComponent(u.username) %>/reset-quota" class="inline" onsubmit="return confirm('Remettre à zéro la consommation de <%= u.username %> ?');">
-                  <button class="btn small subtle" type="submit" title="Remettre la consommation à zéro">RàZ Quota</button>
-                </form>
-                <form method="POST" action="/admin/users/<%= encodeURIComponent(u.username) %>/delete" class="inline" onsubmit="return confirm('Supprimer définitivement l\'utilisateur <%= u.username %> ?');">
-                  <button class="btn small danger" type="submit" title="Supprimer cet utilisateur">×</button>
-                </form>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-      <% } %>
     </div>
 
     <div class="panel">
