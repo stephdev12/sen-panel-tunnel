@@ -14,6 +14,9 @@ require('./db/database'); // bootstraps schema + default admin
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const resellerRoutes = require('./routes/reseller');
+const appApiRoutes = require('./routes/appApi');
+const profilesRoutes = require('./routes/profiles');
+const appAccountsRoutes = require('./routes/appAccounts');
 const { runEnforcement } = require('./cron/enforcement');
 const i18n = require('./lib/i18n');
 const format = require('./lib/format');
@@ -36,6 +39,7 @@ app.use(helmet({
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -84,7 +88,10 @@ app.get('/', (req, res) => {
 // Public - no login required, just project/company info.
 app.get('/about', (req, res) => res.render('about'));
 
+app.use('/api/app/v1', appApiRoutes);
 app.use(authRoutes);
+app.use('/admin/profiles', profilesRoutes);
+app.use('/admin/app-accounts', appAccountsRoutes);
 app.use('/admin', adminRoutes);
 app.use('/reseller', resellerRoutes);
 

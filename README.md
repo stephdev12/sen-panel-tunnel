@@ -1,249 +1,89 @@
-<!-- NOVA XTUNNEL Banner -->
+<!-- SEN PANEL TUNNEL Banner -->
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.1.0-blue.svg" alt="Version">
 <a href="LICENSE">
   <img src="https://img.shields.io/badge/license-GPL--3.0-red.svg" alt="License: GPL-3.0">
 </a>
   <img src="https://img.shields.io/badge/bash-5.0+-4EAA25.svg" alt="Bash">
-  <img src="https://img.shields.io/badge/node.js-16.x+-339933.svg" alt="Node.js">
+  <img src="https://img.shields.io/badge/node.js-18.x+-339933.svg" alt="Node.js">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
-  <img src="https://img.shields.io/badge/Powered%20by-NOSTRA-ff69b4.svg" alt="Powered by NOSTRA">
+  <img src="https://img.shields.io/badge/Powered%20by-SEN-ff69b4.svg" alt="Powered by SEN">
 </p>
 
-<h1 align="center">🚀 NOVA XTUNNEL</h1>
+<h1 align="center">🚀 SEN PANEL TUNNEL</h1>
 
 <p align="center">
-  <strong>Enterprise-grade VPN tunnel management suite with dual-panel architecture</strong>
+  <strong>Suite complète de gestion de tunnels VPN SSH/UDP avec architecture double-panel & support de l'application cliente Surfeo</strong>
 </p>
 
-# 📋 Overview
+---
 
-NOVA XTUNNEL is a comprehensive VPN management solution featuring both a terminal panel for direct VPS administration and a web panel for remote multi-client management. The architecture ensures zero redundancy—both panels operate on the same system files without conflicts.
-Supported Protocols
+## 📋 Présentation
 
-    SSH WebSocket/UDP/TLS
+**SEN PANEL TUNNEL** est une solution complète de gestion de serveurs VPN combinant un panel terminal interactif (`menu`) et un panel web d'administration et de revente en Node.js/Express, synchronisés sur les mêmes fichiers système (`/etc/novaxtunnel/users.db`).
 
-    SSH + V2ray SlowDNS
+### Protocoles & Fonctionnalités
+- **SSH WebSocket / Payload HTTP** (avec support CloudFront CDN et code HTTP 101)
+- **SSH UDP Custom / UDPGW** (port 7300)
+- **SSH TLS / Stunnel & HAProxy**
+- **ZiVPN & SlowDNS (DNSTT)**
+- **API Surfeo v1** (`/api/app/v1`) pour l'activation sans configuration, la liaison matérielle d'appareils et le suivi en temps réel
+- **BBR & Optimisations réseau TCP / Quotas fiabilisés** (`cur=$wchar` sans double comptage, OpenSSH 9.8+ `sshd-session`)
 
-    ZiVPN
+---
 
-    HAProxy load balancing
-    
-    3x-ui parallel installation 
+## 🏗️ Architecture
 
-🏗️ Main Architecture
 ```text
-
-nova-x-tunnel/
-├── terminal-panel/                 # Bash interactive SSH menu
-│   ├── install.sh                  # Complete VPS installation
-│   ├── menu.sh                     # Main panel interface (`menu` command)
-│   └── sshd                    # SSH daemon configuration
-│             
+/opt/novaxtunnel/
+├── bootstrap.sh                    # Script d'installation & mise à jour globale
+├── senpanel-fix.sh                 # Correctifs WebSocket, HAProxy, BBR, OpenSSH 9.8+, quotas
+├── terminal-panel/                 # Menu interactif SSH Bash
+│   ├── install.sh                  # Installation sur le VPS
+│   ├── menu.sh                     # Interface terminal (`menu`)
+│   └── ssh                         # Configuration SSH durcie
 │
-└── web-panel/                      # Node.js Admin/Reseller interface
+└── web-panel/                      # Interface Web Node.js Admin / Resellers + API Surfeo
     ├── deploy/
-    │   └── install.sh              # Automated deployment with Certbot
-    ├── server.js                   # Main application entry
-    ├── routes/                     # API endpoints
-    ├── views/                      # EJS templates
-    ├── lib/                        # Core business logic
-    ├── db/                         # Database schemas & migrations
-    └── README.md                   # Web panel documentation
+    │   ├── ubuntu24-install.sh     # Installateur automatisé Ubuntu 24.04 (Nginx + Let's Encrypt)
+    │   └── install.sh              # Déploiement interactif avancé
+    ├── server.js                   # Point d'entrée de l'application Express
+    ├── routes/
+    │   ├── appApi.js               # API cliente Surfeo (/api/app/v1)
+    │   ├── profiles.js             # Gestion des profils de connexion
+    │   ├── appAccounts.js          # Comptes liés & clés d'activation
+    │   └── admin.js                # Administration
+    └── db/                         # Base SQLite (profils, clés, comptes, logs)
 ```
-**🚀 Quick Installation**
-One-Command Install
-```bash
-curl -fsSL https://raw.githubusercontent.com/NOSTRA-DevOps/nova-xtunnel/main/bootstrap.sh | sudo bash
-```
-
-The bootstrap script intelligently detects installed components:
-
-    First run: Clones repository to /opt/nova-x-tunnel and installs terminal panel (web panel optional)
-
-    Subsequent runs: Performs git pull and updates installed panels only
-
-Component-Specific Updates
-```bash
-cd /opt/nova-x-tunnel
-```
-# Update terminal panel only
-bash terminal-panel/update.sh
-
-# Update web panel only
-bash web-panel/update.sh
-
-🔧 Manual Installation
-Terminal Panel
-```bash
-
-git clone https://github.com/NOSTRA-DevOps/nova-xtunnel.git nova-x-tunnel
-cd nova-x-tunnel/terminal-panel
-sudo bash install.sh
-```
-What's installed:
-
-    menu command for SSH/ZiVPN/SlowDNS/HAProxy management
-
-    Optimized SSH daemon configuration
-
-    Service monitoring and auto-restart mechanisms
-
-Web Panel
-```bash
-cd ../web-panel
-sudo bash deploy/install.sh
-```
-**Installation features:**
-
-    Interactive domain, port, and credentials setup
-
-    Automatic Cloudflare proxy detection
-
-    Adaptive TLS certificate issuance (Let's Encrypt)
-
-    Non-interactive mode with CLI flags support
-
-    ⚠️ Port Configuration: Nginx runs on a dedicated port (default: 8443) to avoid conflicts with HAProxy on ports 80/443.
-
-Access URL: https://panel.yourdomain.com:port
-Web Panel Management
-
-After installation, the novaxpanel command provides comprehensive management capabilities:
-```bash
-
-novaxpanel status           # Show service status
-novaxpanel logs             # View application logs
-novaxpanel update           # Update to latest version
-novaxpanel domain <domain>  # Change domain
-novaxpanel port <port>      # Change web port
-novaxpanel credentials      # Update admin credentials
-novaxpanel backup           # Create system backup
-novaxpanel restore <file>   # Restore from backup
-novaxpanel uninstall        # Complete removal
-```
-🔄 Data Synchronization
-
-The two panels maintain consistency through shared data files:
-```text
-Data Type	Shared File Location
-SSH Accounts	/etc/novaxtunnel/users.db
-
-SSH Bandwidth Usage	/etc/novaxtunnel/bandwidth/<user>.usage
-
-ZiVPN Credentials & Quotas	/etc/zivpn/config.json
-/etc/zivpn/passwords_meta.json
-```
-Key Benefit: Accounts created in either panel are immediately available in the other.
-📦 Updating After Git Push
-```bash
-
-cd /opt/nova-x-tunnel
-git pull
-
-# Update terminal panel
-cp terminal-panel/menu.sh /usr/local/bin/menu
-chmod +x /usr/local/bin/menu
-
-# Update web panel
-cd web-panel
-npm install                    # Only if package.json changed
-systemctl restart novaxpanel
-```
-**🛡️ Security Features**
-
-    ✅ TLS encryption via Let's Encrypt
-
-    ✅ Automatic certificate renewal
-
-    ✅ Cloudflare proxy compatibility
-
-    ✅ Secure session management
-
-    ✅ Role-based access control (Admin/Reseller)
-
-    ✅ Audit logging
-
-    ✅ Rate limiting protection
-
-**📊 Monitoring & Logging**
-
-    Real-time service health checks
-
-    User bandwidth tracking
-
-    Connection monitoring
-
-    System resource usage
-
-    Comprehensive audit trails
-
-
-# 🌍 Community & Support
-
-<p align="center">
-
-<a href="https://whatsapp.com/channel/0029Vb6yLAG9WtC0zbXeEo2t">
-  <img src="https://img.shields.io/badge/💬%20Official%20WhatsApp%20Channel-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" />
-</a>
-
-<a href="https://whatsapp.com/channel/0029Vb8ZJnsAYlUHo1uA6W0y">
-  <img src="https://img.shields.io/badge/📱%20WhatsApp%20Channel%202-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" />
-</a>
-
-<br>
-
-<a href="https://t.me/addlist/CpQzYQfWwwxmYTk0">
-  <img src="https://img.shields.io/badge/✈️%20Telegram%20Channel%20%26%20Support-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" />
-</a>
-
-<a href="https://www.facebook.com/profile.php?id=61591828051151">
-  <img src="https://img.shields.io/badge/📘%20Facebook-1877F2?style=for-the-badge&logo=facebook&logoColor=white" />
-</a>
-
-<br>
-
-<a href="https://discord.gg/xGAGs69UHj">
-  <img src="https://img.shields.io/badge/🎮%20Discord%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white" />
-</a>
-
-<a href="https://www.youtube.com/@LaboKingFreeSurf">
-  <img src="https://img.shields.io/badge/🎥%20YouTube%20Channel-FF0000?style=for-the-badge&logo=youtube&logoColor=white" />
-</a>
-
-</p>
-
 
 ---
 
-## 📧 Contact
+## 🚀 Installation Rapide
 
-**Author:** NOSTRA
-**Email:** contact.nostra237@gmail.com
+### En une seule commande :
+```bash
+curl -fsSL https://raw.githubusercontent.com/stephdev12/sen-panel-tunnel/main/bootstrap.sh | sudo bash
+```
 
----
+Le script installe automatiquement :
+1. Le panel terminal `/usr/local/bin/menu`
+2. Les optimisations VPS (`senpanel-fix.sh` : BBR, CloudFront/HAProxy sur port 444, OpenSSH 9.8+, limites fichiers)
+3. Le panel web Node.js avec certificat SSL Let's Encrypt automatique
 
-# ⭐ Support the Project
-
-If you find this project useful, consider giving it a ⭐ on GitHub.
-It helps the project grow and motivates future development.
-
-<a href='https://ko-fi.com/X6N522CQQ2' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi2.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
-
-> 💡 **Looking for DevOps solutions? ?** Reach out to us now!
-
----
-
-# 📄 License
-
-This project is licensed under the **GPL-3.0 License** - see the [LICENSE](./LICENSE) file for details.
-
-Copyright (c) 2026 **NOVA XTUNNEL**
+### Commandes utiles sur le VPS :
+- Ouvrir le menu terminal : `menu`
+- Gérer le panel web : `novaxpanel` ou `systemctl status novaxpanel`
+- Réappliquer les correctifs WebSocket / CloudFront : `sudo bash /opt/novaxtunnel/senpanel-fix.sh`
 
 ---
 
-<p align="center">
+## 📱 Extension Application Surfeo
 
-<i>Powerd by<i> <b>NOSTRA<i> (Nova X-Code)</i></b>
-
-</p>
+Le panel intègre directement l'API pour l'application cliente **Surfeo** :
+- **ID Appareil** : format Crockford base32 `XXXX-XXXX-XXXX-X`
+- **Clés d'activation** : `NVX1-SEN-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX`
+- **Endpoints** :
+  - `POST /api/app/v1/activate`
+  - `GET /api/app/v1/status`
+  - `GET /api/app/v1/config`
+  - `GET /api/app/v1/meta`

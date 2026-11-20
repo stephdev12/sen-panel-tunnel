@@ -709,7 +709,7 @@ while true; do
             session_pids["$ssh_owner"]+="$ssh_pid "
             monitor_ppids["$ssh_ppid"]=1
         fi
-    done < <(ps -C sshd -o pid=,ppid=,user= 2>/dev/null)
+    done < <(ps -C sshd,sshd-session -o pid=,ppid=,user= 2>/dev/null)
 
     for p in /proc/[0-9]*/loginuid; do
         [[ -f "$p" ]] || continue
@@ -730,7 +730,7 @@ while true; do
 
         comm=""
         read -r comm < "$pid_dir/comm" || comm=""
-        [[ "$comm" == "sshd" ]] || continue
+        [[ "$comm" == "sshd" || "$comm" == "sshd-session" ]] || continue
 
         ppid_val=""
         while read -r key value; do
@@ -887,7 +887,7 @@ while true; do
                         wchar:) wchar=${value:-0} ;;
                     esac
                 done < "$io_file"
-                cur=$((rchar + wchar))
+                cur=$wchar
             fi
 
             pidfile="$PID_DIR/${user}__${pid}.last"
@@ -2757,7 +2757,7 @@ backend direct_ssh
 
 backend direct_sshp
     mode tcp
-    server ssh_server 127.0.0.1:8888
+    server ssh_server 127.0.0.1:444
 
 backend direct_ssht
     mode tcp
@@ -2975,7 +2975,7 @@ class Server(threading.Thread):
         self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.soc.settimeout(2)
         self.soc.bind((self.host, self.port))
-        self.soc.listen(5)
+        self.soc.listen(1024)
         self.running = True
         try:
             while self.running:
@@ -4060,7 +4060,7 @@ refresh_ssh_session_cache() {
             SSH_SESSION_PIDS["$ssh_owner"]+="$ssh_pid "
             monitor_ppids["$ssh_ppid"]=1
         fi
-    done < <(ps -C sshd -o pid=,ppid=,user= 2>/dev/null)
+    done < <(ps -C sshd,sshd-session -o pid=,ppid=,user= 2>/dev/null)
 
     # Pass 2: remaining root/sshd-owned processes - resolve via loginuid (covers the rare
     # case where privsep didn't produce a directly-owned child at all), but skip any pid
@@ -4084,7 +4084,7 @@ refresh_ssh_session_cache() {
 
         seen_sessions["$candidate_user:$ssh_pid"]=1
         SSH_SESSION_PIDS["$candidate_user"]+="$ssh_pid "
-    done < <(ps -C sshd -o pid=,ppid=,user= 2>/dev/null)
+    done < <(ps -C sshd,sshd-session -o pid=,ppid=,user= 2>/dev/null)
 
     # Count DISTINCT SSHD SESSION PROCESSES per user - each pid in SSH_SESSION_PIDS is one
     # real login. This is the actual number of open connections, independent of how many
@@ -4192,7 +4192,7 @@ EOF
 
     echo -e "${C_RESET}"
 
-    echo -e "${C_BOLD}${C_TITLE}          NOVA-XTUNNEL MANAGER ${C_DIM}v2.0.0${C_RESET}"
+    echo -e "${C_BOLD}${C_TITLE}       SEN PANEL TUNNEL MANAGER ${C_DIM}v2.0.0${C_RESET}"
     echo -e "${C_DIM}                by ${C_RESET}${C_BOLD}NOSTRA${C_RESET}"
     echo -e "${C_CYAN}              📢 t.me/labokingfreesurf${C_RESET}"
     echo

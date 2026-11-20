@@ -76,6 +76,51 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_reseller ON audit_log(reseller_id);
+
+-- PRD Extension: Connection Profiles
+CREATE TABLE IF NOT EXISTS connection_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,               -- 'ssh' | 'udp'
+  is_active INTEGER NOT NULL DEFAULT 1,
+  params TEXT NOT NULL DEFAULT '{}', -- JSON object with profile details
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- PRD Extension: App-linked Accounts
+CREATE TABLE IF NOT EXISTS app_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL,
+  type TEXT NOT NULL,               -- 'ssh' | 'udp'
+  profile_id INTEGER NOT NULL REFERENCES connection_profiles(id),
+  device_id TEXT NOT NULL,          -- Crockford Base32 13-char ID (XXXX-XXXX-XXXX-X)
+  public_key TEXT,                  -- Base64 device public key, stored upon activation
+  state TEXT NOT NULL DEFAULT 'pending', -- pending | active | expired | quota_exhausted | locked_temporarily | revoked | deleted
+  created_at TEXT DEFAULT (datetime('now')),
+  activated_at TEXT,
+  last_active_at TEXT,
+  app_version TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_accounts_dev ON app_accounts(device_id);
+CREATE INDEX IF NOT EXISTS idx_app_accounts_user ON app_accounts(username);
+
+-- PRD Extension: Activation Keys
+CREATE TABLE IF NOT EXISTS activation_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  app_account_id INTEGER NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+  key_hash TEXT UNIQUE NOT NULL,    -- SHA-256 hash of activation key
+  key_last4 TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unused', -- unused | used | revoked
+  failed_attempts INTEGER NOT NULL DEFAULT 0,
+  locked_until TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_act_keys_hash ON activation_keys(key_hash);
+
 `);
 
 // Bootstrap a default admin account on first run only.
@@ -86,11 +131,47 @@ if (adminCount === 0) {
   const hash = bcrypt.hashSync(defaultPass, 10);
   db.prepare('INSERT INTO admins (username, password_hash) VALUES (?, ?)').run(defaultUser, hash);
   console.log('======================================================');
-  console.log(' NOVA XTUNNEL - default admin account created:');
+  console.log(' SEN PANEL TUNNEL - default admin account created:');
   console.log('   username:', defaultUser);
   console.log('   password:', defaultPass);
   console.log(' CHANGE THIS PASSWORD IMMEDIATELY AFTER FIRST LOGIN.');
   console.log('======================================================');
+}
+
+// Seed initial default connection profiles if none exist
+const profileCount = db.prepare('SELECT COUNT(*) AS c FROM connection_profiles').get().c;
+if (profileCount === 0) {
+  const defaultSshParams = {
+    host: 'd1url4lvz5mor6.cloudfront.net',
+    port: 80,
+    tls: false,
+    sni: null,
+    payload: 'GET /sen HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]',
+    proxy: { enabled: false, host: null, port: null },
+    udpgwPort: 7300,
+    dns: ['1.1.1.1', '8.8.8.8']
+  };
+
+  const defaultUdpParams = {
+    server: '185.183.52.40',
+    port: 7300,
+    auth: '',
+    window: 2,
+    resolver: '127.0.0.1:7300',
+    boostSlowdns: false,
+    dnsForward: false,
+    mode: 'SlowDNS'
+  };
+
+  db.prepare(`
+    INSERT INTO connection_profiles (name, type, is_active, params, version)
+    VALUES (?, ?, 1, ?, 1)
+  `).run('CloudFront WebSocket Standard', 'ssh', JSON.stringify(defaultSshParams));
+
+  db.prepare(`
+    INSERT INTO connection_profiles (name, type, is_active, params, version)
+    VALUES (?, ?, 1, ?, 1)
+  `).run('UDP Custom Direct', 'udp', JSON.stringify(defaultUdpParams));
 }
 
 module.exports = db;

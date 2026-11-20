@@ -222,7 +222,7 @@ function mapSshdPidsToUsers(managedUsers) {
 
   let psOut;
   try {
-    psOut = execFileSync('ps', ['-C', 'sshd', '-o', 'pid=,ppid=,user=']).toString();
+    psOut = execFileSync('ps', ['-C', 'sshd,sshd-session', '-o', 'pid=,ppid=,user=']).toString();
   } catch {
     return pidToUser; // no sshd processes running (or 'ps' unavailable)
   }

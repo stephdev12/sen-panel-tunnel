@@ -1,0 +1,162 @@
+<%- include('../partials/head', { title: 'Profils de Connexion — SEN PANEL TUNNEL' }) %>
+<div class="shell">
+  <%- include('../partials/sidebar', { role: 'admin' }) %>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title">Profils de Connexion</h1>
+        <p class="page-sub">Gérez les configurations injectées automatiquement dans l'application Surfeo.</p>
+      </div>
+      <div class="user-chip">
+        <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
+        <span><%= t('common.connected_as') %> <b><%= username %></b></span>
+      </div>
+    </div>
+
+    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Profils actifs (<%= profiles.length %>)</h2>
+      </div>
+      <% if (profiles.length === 0) { %>
+        <div class="empty-state">Aucun profil de connexion configuré. Créez-en un ci-dessous.</div>
+      <% } else { %>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Type</th>
+              <th>Version</th>
+              <th>Hôte / Serveur</th>
+              <th>Port</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% profiles.forEach(p => { %>
+            <tr>
+              <td><b><%= p.name %></b></td>
+              <td><span class="pill <%= p.type === 'ssh' ? 'active' : 'locked_manual' %>"><%= p.type.toUpperCase() %></span></td>
+              <td class="mono">v<%= p.version %></td>
+              <td class="mono"><%= p.type === 'ssh' ? (p.parsedParams.host || '-') : (p.parsedParams.server || '-') %></td>
+              <td class="mono"><%= p.type === 'ssh' ? p.parsedParams.port : p.parsedParams.port %></td>
+              <td><span class="pill <%= p.is_active ? 'active' : 'locked_expired' %>"><%= p.is_active ? 'Actif' : 'Inactif' %></span></td>
+              <td>
+                <form method="POST" action="/admin/profiles/<%= p.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce profil ?');">
+                  <button type="submit" class="btn small error">Supprimer</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Create Profile Form -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Créer un nouveau profil de connexion</h2>
+      </div>
+      <form method="POST" action="/admin/profiles/create" style="padding:16px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+          <div>
+            <label for="name">Nom du profil (interne)</label>
+            <input type="text" id="name" name="name" required placeholder="ex: CloudFront WebSocket Standard">
+          </div>
+          <div>
+            <label for="type">Type de tunnel</label>
+            <select id="type" name="type" onchange="toggleProfileType(this.value)">
+              <option value="ssh" selected>SSH + WebSocket / HTTP Payload</option>
+              <option value="udp">UDP Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- SSH Settings -->
+        <div id="sshFields" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+          <h3 style="font-size:15px; margin-bottom:12px;">Paramètres SSH</h3>
+          <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:16px;">
+            <div>
+              <label for="host">Hôte (Domaine CloudFront ou IP)</label>
+              <input type="text" id="host" name="host" placeholder="d1url4lvz5mor6.cloudfront.net">
+            </div>
+            <div>
+              <label for="port">Port</label>
+              <input type="number" id="port" name="port" value="80">
+            </div>
+            <div>
+              <label for="udpgwPort">Port UDPGW</label>
+              <input type="number" id="udpgwPort" name="udpgwPort" value="7300">
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label style="display:inline-flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="tls" name="tls">
+              Activer TLS / SSL
+            </label>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label for="sni">SNI (Server Name Indication si TLS actif)</label>
+            <input type="text" id="sni" name="sni" placeholder="optionnel si non TLS">
+          </div>
+
+          <div style="margin-top:12px;">
+            <label for="payload">Payload HTTP (macros: [crlf], [ua], [host], [port], [host_port])</label>
+            <textarea id="payload" name="payload" rows="3" style="width:100%; font-family:monospace;">GET /sen HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]</textarea>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label for="dns">Serveurs DNS (séparés par des virgules)</label>
+            <input type="text" id="dns" name="dns" value="1.1.1.1, 8.8.8.8">
+          </div>
+        </div>
+
+        <!-- UDP Settings -->
+        <div id="udpFields" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px; display:none;">
+          <h3 style="font-size:15px; margin-bottom:12px;">Paramètres UDP Custom</h3>
+          <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:16px;">
+            <div>
+              <label for="udp_server">Serveur UDP (IP ou domaine)</label>
+              <input type="text" id="udp_server" name="udp_server" placeholder="185.183.52.40">
+            </div>
+            <div>
+              <label for="udp_port">Port UDP</label>
+              <input type="number" id="udp_port" name="udp_port" value="7300">
+            </div>
+            <div>
+              <label for="window">Window</label>
+              <input type="number" id="window" name="window" value="2">
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label for="resolver">Résolveur</label>
+            <input type="text" id="resolver" name="resolver" value="127.0.0.1:7300">
+          </div>
+        </div>
+
+        <div style="margin-top:20px;">
+          <button type="submit" class="btn">Créer le profil</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleProfileType(val) {
+  document.getElementById('sshFields').style.display = val === 'ssh' ? 'block' : 'none';
+  document.getElementById('udpFields').style.display = val === 'udp' ? 'block' : 'none';
+}
+</script>
+</body>
+</html>

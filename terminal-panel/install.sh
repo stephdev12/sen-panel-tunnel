@@ -9,13 +9,13 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "Installing NOVA X Tunnel Manager..."
+echo "Installing SEN PANEL TUNNEL Manager..."
 
 # Install menu (copied from this repo, no external download needed)
 cp "$SCRIPT_DIR/menu.sh" /usr/local/bin/menu
 chmod +x /usr/local/bin/menu
 
-echo "Applying NOVA X Tunnel SSH configuration..."
+echo "Applying SEN PANEL TUNNEL SSH configuration..."
 
 SSHD_CONFIG="/etc/ssh/sshd_config"
 BACKUP="/etc/ssh/sshd_config.backup.$(date +%F-%H%M%S)"

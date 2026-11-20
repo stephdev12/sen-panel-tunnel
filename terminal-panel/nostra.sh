@@ -19,7 +19,7 @@ echo -e "${PRIMARY}██║ ╚████║╚██████╔╝██
 echo -e "${PRIMARY}╚═╝  ╚═══╝ ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝${RESET}"
 echo -e ""
 echo -e "${SEP}═══════════════════════════════════════════════════════${RESET}"
-echo -e "${PRIMARY}                 NOVA-XTUNNEL MANAGER                  ${RESET}"
+echo -e "${PRIMARY}               SEN PANEL TUNNEL MANAGER                ${RESET}"
 echo -e "${SEP}═══════════════════════════════════════════════════════${RESET}"
 echo -e "•${LABEL}Tg:${RESET}${BLUE}t.me/LaboKingfreesurf${RESET} •${LABEL}YT:${RESET}${BLUE}youtube.com/@labokingfreesurf${RESET}"
 echo -e "•${LABEL}WA:${RESET}${BLUE} +237 676 250 509     ${RESET}•${LABEL}TK:${RESET}${BLUE}@labokingfreesurf${RESET}"

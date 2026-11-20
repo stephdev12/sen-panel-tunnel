@@ -1,7 +1,7 @@
 {
-  "name": "nova-x-panel",
+  "name": "sen-panel-tunnel",
   "version": "2.0.0",
-  "description": "NOVA XTUNNEL - Admin/Reseller web panel",
+  "description": "SEN PANEL TUNNEL - Admin/Reseller web panel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
