@@ -218,12 +218,6 @@ cd "$INSTALL_DIR/web-panel"
 npm install --omit=dev --silent
 ok "Dépendances Node.js à jour"
 
-if [[ -f "$INSTALL_DIR/web-panel/deploy/import-ssh-to-panel.js" ]]; then
-    info "Importation des comptes SSH (/etc/novaxtunnel/users.db) vers Surfeo..."
-    node deploy/import-ssh-to-panel.js || true
-    ok "Comptes SSH importés dans le panel"
-fi
-
 if [[ -f "$INSTALL_DIR/web-panel/deploy/sync-app-passwords.js" ]]; then
     info "Synchronisation des mots de passe SSH des comptes app..."
     node deploy/sync-app-passwords.js || true
