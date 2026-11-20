@@ -259,6 +259,7 @@ router.post('/activate', express.json(), (req, res) => {
       SET public_key = ?, state = 'active', activated_at = COALESCE(activated_at, ?), last_active_at = ?, app_version = ?
       WHERE id = ?
     `).run(publicKey || '', now, now, appVersion || '1.0.0', appAccount.id);
+    appAccount.state = 'active';
 
     db.prepare(`
       UPDATE activation_keys
