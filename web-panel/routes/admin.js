@@ -6,6 +6,7 @@ const clientsLib = require('../lib/clients');
 const audit = require('../lib/audit');
 const connectionInfo = require('../lib/connectionInfo');
 const config = require('../config');
+const system = require('../lib/system');
 const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -18,11 +19,102 @@ function actorFrom(req) {
 router.get('/', (req, res) => {
   const resellers = db.prepare('SELECT * FROM resellers ORDER BY created_at DESC').all();
   const enriched = resellers.map((r) => ({ ...r, stats: quota.getResellerStats(r) }));
+
+  // Read raw system SSH users from /etc/novaxtunnel/users.db
+  let rawUsers = [];
+  try {
+    rawUsers = system.readUsersDb();
+  } catch (err) {
+    console.warn('[Admin] readUsersDb error:', err.message);
+  }
+
+  let onlineCounts = new Map();
+  try {
+    onlineCounts = system.getOnlineSshCounts();
+  } catch (err) {
+    console.warn('[Admin] getOnlineSshCounts error:', err.message);
+  }
+
+  const systemUsers = rawUsers.map((u) => {
+    const usedBytes = system.readSshUsageBytes(u.username);
+    const usedGb = usedBytes / (1024 * 1024 * 1024);
+    const quotaGb = u.bandwidthGb && parseFloat(u.bandwidthGb) > 0 ? parseFloat(u.bandwidthGb) : null;
+    const isExpired = u.expireDate ? new Date(u.expireDate) < new Date() : false;
+    const online = onlineCounts.get(u.username) || 0;
+    const percentUsed = (quotaGb && quotaGb > 0) ? Math.min(100, Math.round((usedGb / quotaGb) * 100)) : null;
+
+    return {
+      username: u.username,
+      password: u.password,
+      expireDate: u.expireDate || null,
+      connLimit: parseInt(u.connLimit, 10) || 1,
+      quotaGb,
+      usedBytes,
+      usedGb,
+      percentUsed,
+      online,
+      isExpired
+    };
+  });
+
+  const totalSshOnline = Array.from(onlineCounts.values()).reduce((a, b) => a + b, 0);
+  const totalSshConsumedGb = systemUsers.reduce((sum, u) => sum + u.usedGb, 0);
+  const hasUnlimitedQuota = systemUsers.some((u) => u.quotaGb == null);
+  const totalSshQuotaGb = systemUsers.reduce((sum, u) => sum + (u.quotaGb || 0), 0);
+
   const activity = audit.recent(null, 10);
   res.render('admin/dashboard', {
-    resellers: enriched, protocols: config.PROTOCOLS, activity,
-    error: req.query.error, success: req.query.success
+    resellers: enriched,
+    systemUsers,
+    totalSshOnline,
+    totalSshConsumedGb,
+    hasUnlimitedQuota,
+    totalSshQuotaGb,
+    protocols: config.PROTOCOLS,
+    activity,
+    error: req.query.error,
+    success: req.query.success
   });
+});
+
+router.post('/users/create', (req, res) => {
+  try {
+    const { username, password, conn_limit, bandwidth_gb, expiry_date } = req.body;
+    if (!username || !password) throw new Error('Nom d\'utilisateur et mot de passe requis.');
+    system.createSshUser({
+      username: username.trim(),
+      password: password.trim(),
+      expiryDate: expiry_date || null,
+      maxConnections: parseInt(conn_limit, 10) || 1,
+      quotaGb: bandwidth_gb ? parseFloat(bandwidth_gb) : null
+    });
+    audit.log(actorFrom(req), 'create_ssh_user', `Created SSH user ${username}`);
+    res.redirect('/admin?success=' + encodeURIComponent(`Utilisateur ${username} créé avec succès.`));
+  } catch (e) {
+    res.redirect('/admin?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/users/:username/reset-quota', (req, res) => {
+  try {
+    const { username } = req.params;
+    system.resetSshUsage(username);
+    audit.log(actorFrom(req), 'reset_ssh_quota', `Reset quota for user ${username}`);
+    res.redirect('/admin?success=' + encodeURIComponent(`Quota réinitialisé pour ${username}.`));
+  } catch (e) {
+    res.redirect('/admin?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/users/:username/delete', (req, res) => {
+  try {
+    const { username } = req.params;
+    system.deleteSshUser(username);
+    audit.log(actorFrom(req), 'delete_ssh_user', `Deleted SSH user ${username}`);
+    res.redirect('/admin?success=' + encodeURIComponent(`Utilisateur ${username} supprimé avec succès.`));
+  } catch (e) {
+    res.redirect('/admin?error=' + encodeURIComponent(e.message));
+  }
 });
 
 router.get('/activity', (req, res) => {
