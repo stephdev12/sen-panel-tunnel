@@ -17,7 +17,7 @@
 set -Eeuo pipefail
 
 REPO_URL="https://github.com/stephdev12/sen-panel-tunnel.git"
-TARGET_DIR="/opt/novaxtunnel"
+TARGET_DIR="/opt/nova-x-tunnel"
 OLD_LEGACY_DIR="/opt/nova-x-tunnel"
 SERVICE_NAME="novaxpanel"
 
@@ -124,7 +124,7 @@ fi
 [[ -d "/etc/nginx/sites-available" ]] && cp -a /etc/nginx/sites-available "$BACKUP_DIR/" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
-# 4. Synchronisation du nouveau dépôt vers /opt/novaxtunnel
+# 4. Synchronisation du nouveau dépôt vers /opt/nova-x-tunnel
 # -----------------------------------------------------------------------------
 info "Synchronisation du code vers $TARGET_DIR..."
 

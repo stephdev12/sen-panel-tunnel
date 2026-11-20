@@ -69,7 +69,7 @@ fi
 
 # Run NOVA X Tunnel setup
 bash /usr/local/bin/menu --install-setup
-bash /opt/novaxtunnel/terminal-panel/nostra.sh
+bash /opt/nova-x-tunnel/terminal-panel/nostra.sh
 
 echo "Installation complete!"
 echo "Type 'menu' to start."

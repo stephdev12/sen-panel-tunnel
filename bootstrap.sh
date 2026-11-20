@@ -8,7 +8,7 @@
 set -e
 
 REPO_URL="https://github.com/stephdev12/sen-panel-tunnel.git"
-INSTALL_DIR="/opt/novaxtunnel"
+INSTALL_DIR="/opt/nova-x-tunnel"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Error: This script must be run as root (sudo)."

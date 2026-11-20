@@ -150,7 +150,7 @@ done
 # -----------------------------------------------------------------------------
 # Panel web (Node) : même problème de nom de processus (lib/system.js)
 PANEL_DIR=$(systemctl show novaxpanel -p WorkingDirectory --value 2>/dev/null)
-[[ -z "$PANEL_DIR" && -d "/opt/novaxtunnel/web-panel" ]] && PANEL_DIR="/opt/novaxtunnel/web-panel"
+[[ -z "$PANEL_DIR" && -d "/opt/nova-x-tunnel/web-panel" ]] && PANEL_DIR="/opt/nova-x-tunnel/web-panel"
 PANEL_JS="${PANEL_DIR}/lib/system.js"
 if [[ -n "$PANEL_DIR" && -f "$PANEL_JS" ]]; then
     if grep -q "'-C', 'sshd', '-o'" "$PANEL_JS"; then

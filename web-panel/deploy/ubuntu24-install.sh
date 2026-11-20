@@ -9,7 +9,7 @@ set -Eeuo pipefail
 
 # ================= CONFIGURATION =================
 
-APP_DIR="/opt/novaxtunnel/web-panel"
+APP_DIR="/opt/nova-x-tunnel/web-panel"
 APP_ENTRY="server.js"
 APP_PORT="3000"
 

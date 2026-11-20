@@ -35,7 +35,7 @@
 ## 🏗️ Architecture
 
 ```text
-/opt/novaxtunnel/
+/opt/nova-x-tunnel/
 ├── bootstrap.sh                    # Script d'installation & mise à jour globale
 ├── senpanel-fix.sh                 # Correctifs WebSocket, HAProxy, BBR, OpenSSH 9.8+, quotas
 ├── terminal-panel/                 # Menu interactif SSH Bash
@@ -70,7 +70,7 @@ Ce script garantit :
 - **Sessions SSH actives maintenues** (aucun redémarrage destructeur de sshd)
 - **Comptes clients préservés** (`/etc/novaxtunnel/users.db` et compteurs de données)
 - **Comptes revendeurs et admin préservés** (`panel.sqlite3` et `.env`)
-- **Lien symbolique de compatibilité** `/opt/nova-x-tunnel -> /opt/novaxtunnel`
+- **Lien symbolique de compatibilité** `/opt/nova-x-tunnel -> /opt/nova-x-tunnel`
 - **Application immédiate des correctifs** WebSocket HAProxy, OpenSSH 9.8+, quotas fiabilisés et TCP BBR
 
 ---
@@ -90,7 +90,7 @@ Le script installe automatiquement :
 ### Commandes utiles sur le VPS :
 - Ouvrir le menu terminal : `menu`
 - Gérer le panel web : `novaxpanel` ou `systemctl status novaxpanel`
-- Réappliquer les correctifs WebSocket / CloudFront : `sudo bash /opt/novaxtunnel/senpanel-fix.sh`
+- Réappliquer les correctifs WebSocket / CloudFront : `sudo bash /opt/nova-x-tunnel/senpanel-fix.sh`
 
 ---
 
