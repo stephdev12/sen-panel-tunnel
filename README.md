@@ -58,7 +58,24 @@
 
 ---
 
-## 🚀 Installation Rapide
+## 🔄 Migration & Mise à niveau sans coupure (Serveurs existants)
+
+Pour mettre à niveau un serveur existant (anciennement sous NOVA XTUNNEL) vers **SEN PANEL TUNNEL** sans couper les sessions en direct et sans perdre **aucun compte client, revendeur ou administrateur** :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/stephdev12/sen-panel-tunnel/main/migrate-to-senpanel.sh | sudo bash
+```
+
+Ce script garantit :
+- **Sessions SSH actives maintenues** (aucun redémarrage destructeur de sshd)
+- **Comptes clients préservés** (`/etc/novaxtunnel/users.db` et compteurs de données)
+- **Comptes revendeurs et admin préservés** (`panel.sqlite3` et `.env`)
+- **Lien symbolique de compatibilité** `/opt/nova-x-tunnel -> /opt/novaxtunnel`
+- **Application immédiate des correctifs** WebSocket HAProxy, OpenSSH 9.8+, quotas fiabilisés et TCP BBR
+
+---
+
+## 🚀 Installation Rapide (Nouveau serveur)
 
 ### En une seule commande :
 ```bash
