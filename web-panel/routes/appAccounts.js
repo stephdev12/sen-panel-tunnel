@@ -66,9 +66,9 @@ router.post('/create', (req, res) => {
 
     // Insert into app_accounts
     const insertAccount = db.prepare(`
-      INSERT INTO app_accounts (username, type, profile_id, device_id, state)
-      VALUES (?, ?, ?, ?, 'pending')
-    `).run(username, type || 'ssh', profile_id, formattedDeviceId);
+      INSERT INTO app_accounts (username, type, profile_id, device_id, state, quota_gb, expiry_date)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?)
+    `).run(username, type || 'ssh', profile_id, formattedDeviceId, parseFloat(quota_gb) || 0, expiry_date || '');
 
     const accountId = insertAccount.lastInsertRowid;
 

@@ -54,16 +54,16 @@ function buildSubscriptionInfo(appAccount) {
     let userEntry = {};
     try {
       const usersDb = system.readUsersDb();
-      userEntry = usersDb.find((u) => u.username === appAccount.username) || {};
+      userEntry = usersDb.find((u) => u.username && u.username.toLowerCase() === (appAccount.username || '').toLowerCase()) || {};
     } catch (dbErr) {
       console.warn('[AppApi] Could not read users.db:', dbErr.message);
     }
 
     const usedBytes = getUserUsedBytes(appAccount.username);
-    const quotaGb = parseFloat(userEntry.bandwidthGb) || 0;
+    const quotaGb = parseFloat(userEntry.bandwidthGb) || parseFloat(appAccount.quota_gb) || 0;
     const quotaBytes = quotaGb > 0 ? Math.round(quotaGb * 1024 * 1024 * 1024) : 0; // 0 = unlimited
 
-    const expireDate = userEntry.expireDate || null;
+    const expireDate = userEntry.expireDate || appAccount.expiry_date || null;
     const now = new Date();
     let isExpired = false;
     if (expireDate) {
