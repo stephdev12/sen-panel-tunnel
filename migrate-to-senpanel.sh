@@ -62,6 +62,10 @@ if [[ -n "$CURRENT_SERVICE_DIR" && -d "$CURRENT_SERVICE_DIR" ]]; then
     SOURCE_DIR="$CURRENT_SERVICE_DIR"
 elif [[ -d "$INSTALL_DIR" && -f "$INSTALL_DIR/web-panel/package.json" ]]; then
     SOURCE_DIR="$INSTALL_DIR"
+elif [[ -d "/home/ubuntu/nova-x-tunnel/web-panel" ]]; then
+    SOURCE_DIR="/home/ubuntu/nova-x-tunnel"
+elif [[ -d "/home/ubuntu/novaxtunnel/web-panel" ]]; then
+    SOURCE_DIR="/home/ubuntu/novaxtunnel"
 fi
 
 info "Dossier source détecté : ${SOURCE_DIR:-aucun (nouvelle installation)}"
