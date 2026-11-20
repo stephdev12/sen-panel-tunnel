@@ -103,7 +103,8 @@ CREATE TABLE IF NOT EXISTS app_accounts (
   last_active_at TEXT,
   app_version TEXT,
   quota_gb REAL DEFAULT 0,
-  expiry_date TEXT
+  expiry_date TEXT,
+  password TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_app_accounts_dev ON app_accounts(device_id);
@@ -114,6 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_app_accounts_user ON app_accounts(username);
 // Seamless migrations for existing tables
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN quota_gb REAL DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN expiry_date TEXT'); } catch {}
+try { db.exec('ALTER TABLE app_accounts ADD COLUMN password TEXT'); } catch {}
 
 db.exec(`
 

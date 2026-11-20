@@ -122,7 +122,7 @@ function buildConfigPayload(profile, appAccount) {
   let userEntry = {};
   try {
     const usersDb = system.readUsersDb();
-    userEntry = usersDb.find((u) => u.username === appAccount.username) || {};
+    userEntry = usersDb.find((u) => u.username && u.username.toLowerCase() === (appAccount.username || '').toLowerCase()) || {};
   } catch (dbErr) {
     console.warn('[AppApi] Could not read users.db for config:', dbErr.message);
   }
@@ -144,7 +144,7 @@ function buildConfigPayload(profile, appAccount) {
         tls: Boolean(parsedParams.tls),
         sni: parsedParams.sni || null,
         username: appAccount.username,
-        password: userEntry.password || '',
+        password: userEntry.password || appAccount.password || '',
         payload: parsedParams.payload || 'GET /sen HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]',
         proxy: parsedParams.proxy || { enabled: false, host: null, port: null },
         udpgwPort: parseInt(parsedParams.udpgwPort, 10) || 7300,
