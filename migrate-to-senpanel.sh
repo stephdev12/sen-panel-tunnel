@@ -106,10 +106,14 @@ if [[ -n "$SOURCE_DIR" && -d "$SOURCE_DIR/web-panel" ]]; then
         ok "Fichier de configuration .env sauvegardé"
     fi
 
-    if [[ -f "$SOURCE_DIR/web-panel/db/panel.sqlite3" ]]; then
-        cp -a "$SOURCE_DIR/web-panel/db/panel.sqlite3" "$BACKUP_DIR/web-panel/panel.sqlite3"
+    if compgen -G "$SOURCE_DIR/web-panel/db/panel.sqlite3*" > /dev/null 2>&1; then
+        cp -a "$SOURCE_DIR/web-panel/db/panel.sqlite3"* "$BACKUP_DIR/web-panel/"
         PRESERVED_PANEL_DB="$BACKUP_DIR/web-panel/panel.sqlite3"
-        ok "Base de données panel.sqlite3 sauvegardée (comptes admin & revendeurs)"
+        ok "Base de données panel.sqlite3 (et fichiers WAL) sauvegardée"
+    elif [[ -f "$SOURCE_DIR/web-panel/panel.sqlite3" ]]; then
+        cp -a "$SOURCE_DIR/web-panel/panel.sqlite3"* "$BACKUP_DIR/web-panel/"
+        PRESERVED_PANEL_DB="$BACKUP_DIR/web-panel/panel.sqlite3"
+        ok "Base de données panel.sqlite3 sauvegardée"
     fi
 
     if [[ -f "$SOURCE_DIR/web-panel/db/sessions.sqlite3" ]]; then
@@ -161,8 +165,8 @@ info "Restauration des comptes admin, revendeurs et de la configuration..."
 mkdir -p "$INSTALL_DIR/web-panel/db"
 
 if [[ -n "$PRESERVED_PANEL_DB" && -f "$PRESERVED_PANEL_DB" ]]; then
-    cp -a "$PRESERVED_PANEL_DB" "$INSTALL_DIR/web-panel/db/panel.sqlite3"
-    ok "Base panel.sqlite3 restaurée avec succès (AUCUN compte revendeur/admin perdu)"
+    cp -a "$BACKUP_DIR/web-panel/panel.sqlite3"* "$INSTALL_DIR/web-panel/db/"
+    ok "Base panel.sqlite3 (et fichiers WAL) restaurée avec succès (AUCUN compte revendeur/admin perdu)"
 fi
 
 if [[ -n "$PRESERVED_SESSIONS_DB" && -f "$PRESERVED_SESSIONS_DB" ]]; then
@@ -213,6 +217,12 @@ info "Node : $($NODE_BIN --version)"
 cd "$INSTALL_DIR/web-panel"
 npm install --omit=dev --silent
 ok "Dépendances Node.js à jour"
+
+if [[ -f "$INSTALL_DIR/web-panel/deploy/import-ssh-to-panel.js" ]]; then
+    info "Importation des comptes SSH (/etc/novaxtunnel/users.db) vers Surfeo..."
+    node deploy/import-ssh-to-panel.js || true
+    ok "Comptes SSH importés dans le panel"
+fi
 
 if [[ -f "$INSTALL_DIR/web-panel/deploy/sync-app-passwords.js" ]]; then
     info "Synchronisation des mots de passe SSH des comptes app..."
