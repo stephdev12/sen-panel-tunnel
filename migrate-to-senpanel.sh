@@ -214,6 +214,12 @@ cd "$INSTALL_DIR/web-panel"
 npm install --omit=dev --silent
 ok "Dépendances Node.js à jour"
 
+if [[ -f "$INSTALL_DIR/web-panel/deploy/sync-app-passwords.js" ]]; then
+    info "Synchronisation des mots de passe SSH des comptes app..."
+    node deploy/sync-app-passwords.js || true
+    ok "Mots de passe SSH synchronisés"
+fi
+
 # -----------------------------------------------------------------------------
 # 8. Mise à jour du panel terminal (menu) sans couper les sessions SSH
 # -----------------------------------------------------------------------------
