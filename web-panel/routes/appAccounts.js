@@ -28,9 +28,11 @@ function getUserUsedBytes(username) {
 router.get('/', (req, res) => {
   const accounts = db.prepare(`
     SELECT a.*, p.name AS profile_name, p.version AS profile_version,
+           r.username AS reseller_name,
            k.key_last4, k.status AS key_status
     FROM app_accounts a
     LEFT JOIN connection_profiles p ON a.profile_id = p.id
+    LEFT JOIN resellers r ON a.reseller_id = r.id
     LEFT JOIN activation_keys k ON k.app_account_id = a.id AND k.status != 'revoked'
     ORDER BY a.id DESC
   `).all();

@@ -32,19 +32,21 @@ router.get('/activity', (req, res) => {
 
 router.post('/resellers', (req, res) => {
   try {
-    const { username, password, max_users, data_quota_gb, expiry_date, notes } = req.body;
+    const { username, password, max_users, data_quota_gb, max_surfeo_users, surfeo_quota_gb, expiry_date, notes } = req.body;
     const protocols = [].concat(req.body.protocols || []);
     if (!username || !password) throw new Error('Nom d\'utilisateur et mot de passe requis.');
 
     const hash = bcrypt.hashSync(password, 10);
     const info = db.prepare(`
-      INSERT INTO resellers (username, password_hash, data_quota_gb, max_users, protocols, expiry_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO resellers (username, password_hash, data_quota_gb, max_users, max_surfeo_users, surfeo_quota_gb, protocols, expiry_date, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       username,
       hash,
       data_quota_gb === '' ? null : parseFloat(data_quota_gb),
       parseInt(max_users, 10) || 10,
+      max_surfeo_users === '' ? 5 : (parseInt(max_surfeo_users, 10) || 0),
+      surfeo_quota_gb === '' ? null : (parseFloat(surfeo_quota_gb) || null),
       JSON.stringify(protocols),
       expiry_date || null,
       notes || ''
@@ -80,15 +82,17 @@ router.get('/resellers/:id', (req, res) => {
 router.post('/resellers/:id/edit', (req, res) => {
   const id = req.params.id;
   try {
-    const { max_users, data_quota_gb, expiry_date, notes, new_password } = req.body;
+    const { max_users, data_quota_gb, max_surfeo_users, surfeo_quota_gb, expiry_date, notes, new_password } = req.body;
     const protocols = [].concat(req.body.protocols || []);
 
     db.prepare(`
-      UPDATE resellers SET max_users = ?, data_quota_gb = ?, protocols = ?, expiry_date = ?, notes = ?
+      UPDATE resellers SET max_users = ?, data_quota_gb = ?, max_surfeo_users = ?, surfeo_quota_gb = ?, protocols = ?, expiry_date = ?, notes = ?
       WHERE id = ?
     `).run(
       parseInt(max_users, 10) || 10,
       data_quota_gb === '' ? null : parseFloat(data_quota_gb),
+      max_surfeo_users === '' ? 5 : (parseInt(max_surfeo_users, 10) || 0),
+      surfeo_quota_gb === '' ? null : (parseFloat(surfeo_quota_gb) || null),
       JSON.stringify(protocols),
       expiry_date || null,
       notes || '',

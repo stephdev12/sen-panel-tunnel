@@ -26,12 +26,17 @@
 
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.online_users') %></div>
+        <div class="stat-label"><%= t('reseller_dash.stat.online_users') %> (SSH Standard)</div>
         <div class="stat-value"><%= stats.onlineClientCount %> / <%= reseller.max_users %></div>
         <div class="quota-text"><span class="quota-text-label">Connexions allouées:</span> <span class="quota-text-value"><%= stats.allocatedConnections %> / <%= reseller.max_users %></span></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.quota_consumed') %></div>
+        <div class="stat-label">📱 Comptes Surfeo alloués</div>
+        <div class="stat-value accent"><%= surfeoAccounts.length %> / <%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %></div>
+        <div class="quota-text"><span class="quota-text-label">Quota alloué:</span> <span class="quota-text-value" style="color:var(--accent);"><%= reseller.surfeo_quota_gb ? reseller.surfeo_quota_gb + ' Go' : 'Illimité' %></span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label"><%= t('reseller_dash.stat.quota_consumed') %> (SSH Standard)</div>
         <div class="stat-value">
           <%= fmtData(stats.consumedTotalGb) %> / <%= reseller.data_quota_gb == null ? '∞' : fmtData(reseller.data_quota_gb) %>
         </div>
@@ -42,18 +47,155 @@
         <% } %>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.locked_clients') %></div>
-        <div class="stat-value" style="color: var(--warning);"><%= stats.lockedClientCount %></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.expired_clients') %></div>
-        <div class="stat-value" style="color: var(--warning);"><%= stats.expiredClientCount %></div>
-      </div>
-      <div class="stat-card">
         <div class="stat-label"><%= t('reseller_dash.stat.account_expiry') %></div>
         <div class="stat-value mono" style="font-size:18px;"><%= reseller.expiry_date || t('common.never') %></div>
       </div>
     </div>
+
+    <% if (typeof createdKey !== 'undefined' && createdKey) { %>
+    <div class="alert" style="background: rgba(34, 211, 238, 0.15); border: 1px solid var(--accent); color: var(--text); padding: 18px; margin-bottom: 20px;">
+      <h3 style="margin-top:0; color:var(--accent);">🔑 Clé d'activation Surfeo générée</h3>
+      <p style="margin-bottom:8px;">Compte : <b><%= createdKey.username %></b> · ID Appareil : <code class="mono"><%= createdKey.deviceId %></code></p>
+      <div style="display:flex; align-items:center; gap:10px; margin: 12px 0;">
+        <input type="text" id="copyKeyInput" value="<%= createdKey.key %>" readonly style="font-family:monospace; font-size:16px; font-weight:bold; letter-spacing:1px; flex:1; background:var(--bg); border:1px solid var(--accent); padding:10px;">
+        <button class="btn" onclick="navigator.clipboard.writeText('<%= createdKey.key %>'); alert('Clé copiée !');">Copier</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin-bottom:0;">Message client à envoyer :<br>
+        <code>Voici votre clé Surfeo pour l'appareil <%= createdKey.deviceId %> : <%= createdKey.key %></code>
+      </p>
+    </div>
+    <% } %>
+
+    <!-- ---- Section Comptes Surfeo (Mobile App) ---- -->
+    <div class="panel">
+      <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>📱 Mes Clients Surfeo (<%= surfeoAccounts.length %> / <%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %>)</h2>
+      </div>
+
+      <%
+      function formatByteCount(b) {
+        if (b == null || b <= 0) return '0 B';
+        const units = ['B', 'Ko', 'Mo', 'Go', 'To'];
+        let idx = 0;
+        let val = b;
+        while (val >= 1024 && idx < units.length - 1) {
+          val /= 1024;
+          idx++;
+        }
+        return (idx === 0 ? Math.round(val) : val.toFixed(val < 10 ? 2 : 1)) + ' ' + units[idx];
+      }
+      %>
+
+      <% if (surfeoAccounts.length === 0) { %>
+        <div class="empty-state">Aucun compte client Surfeo créé pour le moment.</div>
+      <% } else { %>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Identifiant</th>
+              <th>ID Appareil</th>
+              <th>Profil</th>
+              <th>Statut</th>
+              <th>Consommation / Quota</th>
+              <th>Clé (Fin)</th>
+              <th>Dernière activité</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% surfeoAccounts.forEach(a => { %>
+            <tr>
+              <td><b><%= a.username %></b></td>
+              <td><code class="mono"><%= a.device_id %></code></td>
+              <td><%= a.profile_name || '-' %> (v<%= a.profile_version || '1' %>)</td>
+              <td>
+                <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'locked_manual' : 'locked_expired') %>">
+                  <%= a.state %>
+                </span>
+              </td>
+              <td>
+                <div style="min-width: 130px;">
+                  <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
+                    <b style="color:var(--text);"><%= formatByteCount(a.usedBytes) %></b>
+                    <span style="color:var(--muted);"><%= a.quota_gb ? a.quota_gb + ' Go' : 'Illimité' %></span>
+                  </div>
+                  <% if (a.quota_gb > 0) { %>
+                    <div style="background:var(--bg); border-radius:4px; height:6px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
+                      <div style="width:<%= Math.min(100, a.percentUsed) %>%; height:100%; background:<%= a.percentUsed >= 95 ? 'var(--danger)' : (a.percentUsed >= 80 ? 'var(--warning)' : 'var(--accent)') %>; border-radius:4px;"></div>
+                    </div>
+                    <div style="font-size:10px; color:var(--muted); text-align:right; margin-top:2px;"><%= a.percentUsed %>% consommé</div>
+                  <% } else { %>
+                    <div style="font-size:10px; color:var(--accent); font-weight:500;">Forfait Illimité</div>
+                  <% } %>
+                </div>
+              </td>
+              <td class="mono">...<%= a.key_last4 || '----' %></td>
+              <td class="mono" style="font-size:12px;"><%= a.last_active_at ? a.last_active_at.replace('T', ' ').slice(0, 19) : 'Jamais' %></td>
+              <td>
+                <div style="display:flex; gap:6px;">
+                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/regenerate-key" onsubmit="return confirm('Générer une nouvelle clé pour cet appareil ?');">
+                    <button type="submit" class="btn small subtle" title="Régénérer la clé">Clé</button>
+                  </form>
+                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/delete" onsubmit="return confirm('Supprimer ce compte Surfeo ?');">
+                    <button type="submit" class="btn small error">Suppr</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Formulaire Création Compte Surfeo -->
+    <% if (surfeoAccounts.length < (reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5)) { %>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Créer un compte client Surfeo (App Mobile)</h2>
+      </div>
+      <form method="POST" action="/reseller/surfeo/create" style="padding:16px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+          <div>
+            <label for="username">Identifiant SSH</label>
+            <input type="text" id="username" name="username" required placeholder="ex: client01">
+          </div>
+          <div>
+            <label for="device_id">ID Appareil (fourni par le client)</label>
+            <input type="text" id="device_id" name="device_id" required placeholder="ex: ABCD-EFGH-JKMN-P" style="text-transform:uppercase;">
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:14px;">
+          <div>
+            <label for="profile_id">Profil de connexion</label>
+            <select id="profile_id" name="profile_id" required>
+              <% profiles.forEach(p => { %>
+                <option value="<%= p.id %>"><%= p.name %> (<%= p.type.toUpperCase() %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div>
+            <label for="quota_gb">Quota de données (Go)</label>
+            <input type="number" step="0.1" id="quota_gb" name="quota_gb" placeholder="Vide = Illimité" <%= reseller.surfeo_quota_gb ? 'max="' + reseller.surfeo_quota_gb + '"' : '' %>>
+            <% if (reseller.surfeo_quota_gb) { %>
+              <small style="color:var(--muted); font-size:11px;">Max alloué : <%= reseller.surfeo_quota_gb %> Go</small>
+            <% } %>
+          </div>
+          <div>
+            <label for="expiry_date">Date d'expiration</label>
+            <input type="date" id="expiry_date" name="expiry_date">
+          </div>
+        </div>
+
+        <div style="margin-top:16px; display:flex; justify-content:flex-end;">
+          <button type="submit" class="btn primary">Générer l'accès Surfeo</button>
+        </div>
+      </form>
+    </div>
+    <% } %>
 
     <%- include('../partials/client_manager', {
       createAction: '/reseller/clients',

@@ -57,6 +57,7 @@
             <tr>
               <th>Identifiant</th>
               <th>ID Appareil</th>
+              <th>Créé par</th>
               <th>Profil</th>
               <th>Statut</th>
               <th>Consommation / Quota</th>
@@ -70,6 +71,11 @@
             <tr>
               <td><b><%= a.username %></b></td>
               <td><code class="mono"><%= a.device_id %></code></td>
+              <td>
+                <span class="pill" style="font-size:11px; <%= a.reseller_name ? 'background:rgba(124,92,255,0.15); color:var(--violet);' : 'background:rgba(34,211,238,0.15); color:var(--accent);' %>">
+                  <%= a.reseller_name ? a.reseller_name : 'Admin' %>
+                </span>
+              </td>
               <td><%= a.profile_name || '-' %> (v<%= a.profile_version || '1' %>)</td>
               <td>
                 <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'locked_manual' : 'locked_expired') %>">

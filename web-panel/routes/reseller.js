@@ -1,7 +1,12 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const db = require('../db/database');
 const quota = require('../lib/quota');
 const clientsLib = require('../lib/clients');
+const system = require('../lib/system');
+const { validateDeviceId, formatDeviceId } = require('../lib/crockford');
+const { createActivationKey } = require('../lib/activationKey');
 const audit = require('../lib/audit');
 const connectionInfo = require('../lib/connectionInfo');
 const config = require('../config');
@@ -9,6 +14,18 @@ const { requireReseller } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireReseller);
+
+function getUserUsedBytes(username) {
+  const usageFile = path.join(config.BANDWIDTH_DIR, `${username}.usage`);
+  try {
+    if (fs.existsSync(usageFile)) {
+      const content = fs.readFileSync(usageFile, 'utf8').trim();
+      const bytes = parseInt(content, 10);
+      return isNaN(bytes) ? 0 : bytes;
+    }
+  } catch {}
+  return 0;
+}
 
 function loadSelf(req) {
   return db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.session.userId);
@@ -33,8 +50,37 @@ router.get('/', (req, res) => {
   const activity = audit.recentByActor(reseller.id, 'reseller', 10);
   const allowedProtocols = config.PROTOCOLS.filter((p) => JSON.parse(reseller.protocols || '[]').includes(p.key));
 
+  // Load Surfeo accounts for this reseller
+  const surfeoAccounts = db.prepare(`
+    SELECT a.*, p.name AS profile_name, p.version AS profile_version,
+           k.key_last4, k.status AS key_status
+    FROM app_accounts a
+    LEFT JOIN connection_profiles p ON a.profile_id = p.id
+    LEFT JOIN activation_keys k ON k.app_account_id = a.id AND k.status != 'revoked'
+    WHERE a.reseller_id = ?
+    ORDER BY a.id DESC
+  `).all(reseller.id);
+
+  const surfeoAccountsWithUsage = surfeoAccounts.map((a) => {
+    const usedBytes = getUserUsedBytes(a.username);
+    const quotaGb = parseFloat(a.quota_gb) || 0;
+    const quotaBytes = quotaGb > 0 ? Math.round(quotaGb * 1024 * 1024 * 1024) : 0;
+    const percent = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0;
+    return {
+      ...a,
+      usedBytes,
+      quotaBytes,
+      percentUsed: percent
+    };
+  });
+
+  const profiles = db.prepare('SELECT * FROM connection_profiles WHERE is_active = 1 ORDER BY name ASC').all();
+  const createdKey = req.session.createdKey || null;
+  req.session.createdKey = null;
+
   res.render('reseller/dashboard', {
     reseller, stats, clients, deletedClients, activity, allowedProtocols,
+    surfeoAccounts: surfeoAccountsWithUsage, profiles, createdKey,
     error: req.query.error, success: req.query.success
   });
 });
@@ -132,6 +178,112 @@ router.post('/change-password', (req, res) => {
   } catch (e) {
     res.redirect('/reseller?error=' + encodeURIComponent(e.message));
   }
+});
+
+// -------------------------------------------------------------
+// Reseller Surfeo Account Management
+// -------------------------------------------------------------
+router.post('/surfeo/create', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    const { username, password, device_id, type, profile_id, expiry_date, quota_gb } = req.body;
+    if (!username || !device_id || !profile_id) {
+      throw new Error('Nom d\'utilisateur, ID appareil et profil sont requis.');
+    }
+
+    // Check reseller allocation limits
+    const currentCount = db.prepare('SELECT COUNT(*) AS c FROM app_accounts WHERE reseller_id = ?').get(reseller.id).c;
+    const maxSurfeo = reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5;
+    if (currentCount >= maxSurfeo) {
+      throw new Error(`Limite atteinte : votre allocation est de ${maxSurfeo} compte(s) Surfeo maximum.`);
+    }
+
+    const requestedQuota = parseFloat(quota_gb) || 0;
+    if (reseller.surfeo_quota_gb != null && requestedQuota > reseller.surfeo_quota_gb) {
+      throw new Error(`Le quota demandé (${requestedQuota} Go) dépasse votre quota alloué (${reseller.surfeo_quota_gb} Go).`);
+    }
+
+    const formattedDeviceId = formatDeviceId(device_id);
+    if (!validateDeviceId(formattedDeviceId)) {
+      throw new Error('Format d\'ID appareil invalide (attendu: XXXX-XXXX-XXXX-X).');
+    }
+
+    const profile = db.prepare('SELECT * FROM connection_profiles WHERE id = ?').get(profile_id);
+    if (!profile) throw new Error('Profil de connexion sélectionné introuvable.');
+
+    if (system.sshUserExistsOnSystem(username)) {
+      throw new Error(`L'utilisateur système "${username}" existe déjà.`);
+    }
+
+    const finalPassword = password && password.trim() ? password.trim() : system.randomPassword(16);
+    system.createSshUser({
+      username,
+      password: finalPassword,
+      expiryDate: expiry_date || '',
+      maxConnections: 1,
+      quotaGb: quota_gb === '' ? null : parseFloat(quota_gb)
+    });
+
+    const insertAccount = db.prepare(`
+      INSERT INTO app_accounts (username, type, profile_id, device_id, state, quota_gb, expiry_date, password, reseller_id)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+    `).run(username, type || 'ssh', profile_id, formattedDeviceId, parseFloat(quota_gb) || 0, expiry_date || '', finalPassword, reseller.id);
+
+    const accountId = insertAccount.lastInsertRowid;
+    const actKey = createActivationKey();
+    db.prepare(`
+      INSERT INTO activation_keys (app_account_id, key_hash, key_last4, status)
+      VALUES (?, ?, ?, 'unused')
+    `).run(accountId, actKey.keyHash, actKey.keyLast4);
+
+    audit.log('reseller', reseller.username, 'app_account_create', `Création du compte Surfeo "${username}" pour ${formattedDeviceId}`, accountId);
+
+    req.session.createdKey = {
+      username,
+      deviceId: formattedDeviceId,
+      key: actKey.key,
+      serverCode: actKey.serverCode
+    };
+
+    res.redirect('/reseller?success=' + encodeURIComponent(`Compte Surfeo ${username} créé avec succès.`));
+  } catch (e) {
+    res.redirect('/reseller?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/surfeo/:id/regenerate-key', (req, res) => {
+  const reseller = loadSelf(req);
+  const id = req.params.id;
+  const acc = db.prepare('SELECT * FROM app_accounts WHERE id = ? AND reseller_id = ?').get(id, reseller.id);
+  if (!acc) return res.redirect('/reseller?error=Compte Surfeo introuvable');
+
+  db.prepare('UPDATE activation_keys SET status = \'revoked\' WHERE app_account_id = ?').run(id);
+  const actKey = createActivationKey();
+  db.prepare(`
+    INSERT INTO activation_keys (app_account_id, key_hash, key_last4, status)
+    VALUES (?, ?, ?, 'unused')
+  `).run(id, actKey.keyHash, actKey.keyLast4);
+
+  req.session.createdKey = {
+    username: acc.username,
+    deviceId: acc.device_id,
+    key: actKey.key,
+    serverCode: actKey.serverCode
+  };
+  res.redirect('/reseller?success=' + encodeURIComponent('Nouvelle clé Surfeo générée avec succès.'));
+});
+
+router.post('/surfeo/:id/delete', (req, res) => {
+  const reseller = loadSelf(req);
+  const id = req.params.id;
+  const acc = db.prepare('SELECT * FROM app_accounts WHERE id = ? AND reseller_id = ?').get(id, reseller.id);
+  if (!acc) return res.redirect('/reseller?error=Compte Surfeo introuvable');
+
+  system.deleteSshUser(acc.username);
+  db.prepare('DELETE FROM app_accounts WHERE id = ?').run(id);
+  res.redirect('/reseller?success=' + encodeURIComponent(`Compte Surfeo ${acc.username} supprimé.`));
 });
 
 module.exports = router;

@@ -57,6 +57,7 @@
             <th><%= t('dash.admin.th.status') %></th>
             <th><%= t('dash.admin.th.online') %></th>
             <th><%= t('dash.admin.th.quota') %></th>
+            <th>Alloué Surfeo</th>
             <th><%= t('dash.admin.th.locked_expired') %></th>
             <th><%= t('dash.admin.th.expiry') %></th>
             <th></th>
@@ -72,6 +73,10 @@
               <% if (r.data_quota_gb == null) { %><%= fmtData(r.stats.consumedTotalGb) %> / <%= t('common.unlimited') %><% } else { %>
                 <%= fmtData(r.stats.consumedTotalGb) %> / <%= fmtData(r.data_quota_gb) %>
               <% } %>
+            </td>
+            <td class="mono" style="font-size:12px;">
+              <span style="color:var(--accent); font-weight:600;"><%= r.max_surfeo_users || 0 %> cptes</span>
+              <span style="color:var(--muted);">(<%= r.surfeo_quota_gb ? r.surfeo_quota_gb + ' Go' : 'Illimité' %>)</span>
             </td>
             <td class="mono"><%= r.stats.lockedClientCount %> / <%= r.stats.expiredClientCount %></td>
             <td class="mono"><%= r.expiry_date || t('common.never') %></td>
@@ -118,6 +123,19 @@
           <div>
             <label><%= t('common.expiry_date_empty_never') %></label>
             <input type="date" name="expiry_date">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:12px; background:rgba(34,211,238,0.06); padding:12px; border-radius:8px; border:1px solid rgba(34,211,238,0.25);">
+          <div>
+            <label style="color:var(--accent); font-weight:600;">📱 Nombre max de comptes Surfeo alloués</label>
+            <input type="number" name="max_surfeo_users" value="5" min="0" placeholder="ex: 5 (0 = aucun)">
+            <small style="color:var(--muted); font-size:11px;">Nombre de clés/appareils Surfeo que le revendeur peut générer.</small>
+          </div>
+          <div>
+            <label style="color:var(--accent); font-weight:600;">📊 Quota de données Surfeo (Go)</label>
+            <input type="number" step="0.1" name="surfeo_quota_gb" placeholder="Laisser vide pour illimité">
+            <small style="color:var(--muted); font-size:11px;">Quota global de données (en Go) alloué aux comptes Surfeo.</small>
           </div>
         </div>
 

@@ -116,6 +116,9 @@ CREATE INDEX IF NOT EXISTS idx_app_accounts_user ON app_accounts(username);
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN quota_gb REAL DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN expiry_date TEXT'); } catch {}
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN password TEXT'); } catch {}
+try { db.exec('ALTER TABLE resellers ADD COLUMN max_surfeo_users INTEGER DEFAULT 5'); } catch {}
+try { db.exec('ALTER TABLE resellers ADD COLUMN surfeo_quota_gb REAL'); } catch {}
+try { db.exec('ALTER TABLE app_accounts ADD COLUMN reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE'); } catch {}
 
 db.exec(`
 

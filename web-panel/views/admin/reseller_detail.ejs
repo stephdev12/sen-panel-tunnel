@@ -76,6 +76,17 @@
           </div>
         </div>
 
+        <div class="grid-2" style="margin-top:12px; background:rgba(34,211,238,0.06); padding:12px; border-radius:8px; border:1px solid rgba(34,211,238,0.25);">
+          <div>
+            <label style="color:var(--accent); font-weight:600;">📱 Comptes Surfeo alloués (Max)</label>
+            <input type="number" name="max_surfeo_users" value="<%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %>" min="0">
+          </div>
+          <div>
+            <label style="color:var(--accent); font-weight:600;">📊 Quota Données Surfeo (Go)</label>
+            <input type="number" step="0.1" name="surfeo_quota_gb" value="<%= reseller.surfeo_quota_gb == null ? '' : reseller.surfeo_quota_gb %>" placeholder="Laisser vide pour illimité">
+          </div>
+        </div>
+
         <label><%= t('form.allowed_protocols') %></label>
         <div class="checkbox-row">
           <% const allowed = JSON.parse(reseller.protocols || '[]'); %>
