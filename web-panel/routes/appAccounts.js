@@ -1,4 +1,7 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const config = require('../config');
 const db = require('../db/database');
 const system = require('../lib/system');
 const { validateDeviceId, formatDeviceId } = require('../lib/crockford');
@@ -8,6 +11,18 @@ const audit = require('../lib/audit');
 
 const router = express.Router();
 router.use(requireAdmin);
+
+function getUserUsedBytes(username) {
+  const usageFile = path.join(config.BANDWIDTH_DIR, `${username}.usage`);
+  try {
+    if (fs.existsSync(usageFile)) {
+      const content = fs.readFileSync(usageFile, 'utf8').trim();
+      const bytes = parseInt(content, 10);
+      return isNaN(bytes) ? 0 : bytes;
+    }
+  } catch {}
+  return 0;
+}
 
 // List app accounts
 router.get('/', (req, res) => {
@@ -20,12 +35,25 @@ router.get('/', (req, res) => {
     ORDER BY a.id DESC
   `).all();
 
+  const accountsWithUsage = accounts.map((a) => {
+    const usedBytes = getUserUsedBytes(a.username);
+    const quotaGb = parseFloat(a.quota_gb) || 0;
+    const quotaBytes = quotaGb > 0 ? Math.round(quotaGb * 1024 * 1024 * 1024) : 0;
+    const percent = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0;
+    return {
+      ...a,
+      usedBytes,
+      quotaBytes,
+      percentUsed: percent
+    };
+  });
+
   const profiles = db.prepare('SELECT * FROM connection_profiles WHERE is_active = 1 ORDER BY name ASC').all();
   const createdKey = req.session.createdKey || null;
   req.session.createdKey = null; // show once
 
   res.render('admin/app_accounts', {
-    accounts,
+    accounts: accountsWithUsage,
     profiles,
     createdKey,
     error: req.query.error,

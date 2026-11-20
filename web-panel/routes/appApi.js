@@ -192,6 +192,50 @@ router.get('/meta', (req, res) => {
 });
 
 // -------------------------------------------------------------
+// GET /api/app/v1/servers
+// Public: returns active servers directory for app client sync
+// -------------------------------------------------------------
+router.get('/servers', (req, res) => {
+  try {
+    let rows = [];
+    try {
+      rows = db.prepare('SELECT * FROM servers WHERE is_active = 1 ORDER BY is_master DESC, id ASC').all();
+    } catch {}
+
+    const serverMap = {};
+    for (const s of rows) {
+      serverMap[s.code.toUpperCase()] = {
+        name: s.name,
+        api: [s.api_url],
+        isMaster: Boolean(s.is_master)
+      };
+    }
+
+    // Default master server if empty
+    if (Object.keys(serverMap).length === 0) {
+      serverMap['SEN'] = {
+        name: 'Serveur Principal SEN',
+        api: ['https://panel.senstudio.space:2045'],
+        isMaster: true
+      };
+    }
+
+    const payload = {
+      version: 1,
+      servers: serverMap,
+      serverTime: new Date().toISOString()
+    };
+    const jsonStr = JSON.stringify(payload);
+    try {
+      res.setHeader('X-Server-Signature', signResponse(jsonStr));
+    } catch {}
+    return res.json(payload);
+  } catch (err) {
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // POST /api/app/v1/activate
 // Activates key and binds device public key
 // -------------------------------------------------------------

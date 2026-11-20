@@ -133,7 +133,29 @@ CREATE TABLE IF NOT EXISTS activation_keys (
 
 CREATE INDEX IF NOT EXISTS idx_act_keys_hash ON activation_keys(key_hash);
 
+-- PRD Extension: Servers Management (Master & Nodes)
+CREATE TABLE IF NOT EXISTS servers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  api_url TEXT NOT NULL,
+  is_master INTEGER DEFAULT 0,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_servers_code ON servers(code);
+
 `);
+
+// Seed default master server if none exist
+const serverCount = db.prepare('SELECT COUNT(*) AS c FROM servers').get().c;
+if (serverCount === 0) {
+  db.prepare(`
+    INSERT INTO servers (code, name, api_url, is_master, is_active)
+    VALUES ('SEN', 'Serveur Principal SEN', 'https://panel.senstudio.space:2045', 1, 1)
+  `).run();
+}
 
 // Bootstrap a default admin account on first run only.
 const adminCount = db.prepare('SELECT COUNT(*) AS c FROM admins').get().c;

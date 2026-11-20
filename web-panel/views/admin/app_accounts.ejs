@@ -39,6 +39,19 @@
         <div class="empty-state">Aucun compte lié à l'application. Créez-en un avec le formulaire ci-dessous.</div>
       <% } else { %>
       <div class="table-scroll">
+        <%
+        function formatByteCount(b) {
+          if (b == null || b <= 0) return '0 B';
+          const units = ['B', 'Ko', 'Mo', 'Go', 'To'];
+          let idx = 0;
+          let val = b;
+          while (val >= 1024 && idx < units.length - 1) {
+            val /= 1024;
+            idx++;
+          }
+          return (idx === 0 ? Math.round(val) : val.toFixed(val < 10 ? 2 : 1)) + ' ' + units[idx];
+        }
+        %>
         <table>
           <thead>
             <tr>
@@ -46,6 +59,7 @@
               <th>ID Appareil</th>
               <th>Profil</th>
               <th>Statut</th>
+              <th>Consommation / Quota</th>
               <th>Clé (Fin)</th>
               <th>Dernière activité</th>
               <th>Actions</th>
@@ -61,6 +75,22 @@
                 <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'locked_manual' : 'locked_expired') %>">
                   <%= a.state %>
                 </span>
+              </td>
+              <td>
+                <div style="min-width: 140px;">
+                  <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
+                    <b style="color:var(--text);"><%= formatByteCount(a.usedBytes) %></b>
+                    <span style="color:var(--muted);"><%= a.quota_gb ? a.quota_gb + ' Go' : 'Illimité' %></span>
+                  </div>
+                  <% if (a.quota_gb > 0) { %>
+                    <div style="background:var(--bg); border-radius:4px; height:6px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
+                      <div style="width:<%= Math.min(100, a.percentUsed) %>%; height:100%; background:<%= a.percentUsed >= 95 ? 'var(--danger)' : (a.percentUsed >= 80 ? 'var(--warning)' : 'var(--accent)') %>; border-radius:4px;"></div>
+                    </div>
+                    <div style="font-size:10px; color:var(--muted); text-align:right; margin-top:2px;"><%= a.percentUsed %>% consommé</div>
+                  <% } else { %>
+                    <div style="font-size:10px; color:var(--accent); font-weight:500;">Forfait Illimité</div>
+                  <% } %>
+                </div>
               </td>
               <td class="mono">...<%= a.key_last4 || '----' %></td>
               <td class="mono" style="font-size:12px;"><%= a.last_active_at ? a.last_active_at.replace('T', ' ').slice(0, 19) : 'Jamais' %></td>

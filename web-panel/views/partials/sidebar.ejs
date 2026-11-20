@@ -28,6 +28,7 @@
     <a class="nav-link <%= currentPath === '/admin/system' ? 'active' : '' %>" href="/admin/system"><%= t('nav.system') %></a>
     <a class="nav-link <%= currentPath === '/admin' ? 'active' : '' %>" href="/admin"><%= t('nav.resellers') %></a>
     <a class="nav-link <%= currentPath.startsWith('/admin/profiles') ? 'active' : '' %>" href="/admin/profiles">Profils Tunnel</a>
+    <a class="nav-link <%= currentPath.startsWith('/admin/servers') ? 'active' : '' %>" href="/admin/servers">Serveurs & Nœuds</a>
     <a class="nav-link <%= currentPath.startsWith('/admin/app-accounts') ? 'active' : '' %>" href="/admin/app-accounts">Comptes Surfeo</a>
   </div>
   <% } else { %>
