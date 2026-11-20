@@ -17,9 +17,9 @@
 set -Eeuo pipefail
 
 REPO_URL="https://github.com/stephdev12/sen-panel-tunnel.git"
-TARGET_DIR="/opt/nova-x-tunnel"
-OLD_LEGACY_DIR="/opt/nova-x-tunnel"
+INSTALL_DIR="/opt/nova-x-tunnel"
 SERVICE_NAME="novaxpanel"
+APP_PORT="3000"
 
 C_GREEN=$'\033[0;32m'
 C_RED=$'\033[0;31m'
@@ -60,13 +60,18 @@ CURRENT_SERVICE_DIR="$(systemctl show "$SERVICE_NAME" -p WorkingDirectory --valu
 
 if [[ -n "$CURRENT_SERVICE_DIR" && -d "$CURRENT_SERVICE_DIR" ]]; then
     SOURCE_DIR="$CURRENT_SERVICE_DIR"
-elif [[ -d "$TARGET_DIR" && -f "$TARGET_DIR/web-panel/package.json" ]]; then
-    SOURCE_DIR="$TARGET_DIR"
-elif [[ -d "$OLD_LEGACY_DIR" && -f "$OLD_LEGACY_DIR/web-panel/package.json" ]]; then
-    SOURCE_DIR="$OLD_LEGACY_DIR"
+elif [[ -d "$INSTALL_DIR" && -f "$INSTALL_DIR/web-panel/package.json" ]]; then
+    SOURCE_DIR="$INSTALL_DIR"
 fi
 
 info "Dossier source détecté : ${SOURCE_DIR:-aucun (nouvelle installation)}"
+
+# Lire le port actuel depuis .env si disponible
+if [[ -n "$SOURCE_DIR" && -f "$SOURCE_DIR/web-panel/.env" ]]; then
+    CURRENT_PORT="$(grep -E '^PORT=' "$SOURCE_DIR/web-panel/.env" 2>/dev/null | cut -d'=' -f2- | tr -d ' ' || true)"
+    [[ -n "$CURRENT_PORT" ]] && APP_PORT="$CURRENT_PORT"
+fi
+info "Port applicatif Node.js : $APP_PORT"
 
 # -----------------------------------------------------------------------------
 # 3. Sauvegarde de sécurité complète avant toute modification
@@ -91,7 +96,6 @@ fi
 PRESERVED_ENV=""
 PRESERVED_PANEL_DB=""
 PRESERVED_SESSIONS_DB=""
-PRESERVED_SERVER_KEYS=()
 
 if [[ -n "$SOURCE_DIR" && -d "$SOURCE_DIR/web-panel" ]]; then
     mkdir -p "$BACKUP_DIR/web-panel"
@@ -113,7 +117,7 @@ if [[ -n "$SOURCE_DIR" && -d "$SOURCE_DIR/web-panel" ]]; then
         PRESERVED_SESSIONS_DB="$BACKUP_DIR/web-panel/sessions.sqlite3"
     fi
 
-    if compgen -G "$SOURCE_DIR/web-panel/db/*.pem" > /dev/null; then
+    if compgen -G "$SOURCE_DIR/web-panel/db/*.pem" > /dev/null 2>&1; then
         cp -a "$SOURCE_DIR/web-panel/db/"*.pem "$BACKUP_DIR/web-panel/" 2>/dev/null || true
     fi
 fi
@@ -124,84 +128,89 @@ fi
 [[ -d "/etc/nginx/sites-available" ]] && cp -a /etc/nginx/sites-available "$BACKUP_DIR/" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
-# 4. Synchronisation du nouveau dépôt vers /opt/nova-x-tunnel
+# 4. Synchronisation du nouveau dépôt vers $INSTALL_DIR
 # -----------------------------------------------------------------------------
-info "Synchronisation du code vers $TARGET_DIR..."
+info "Synchronisation du code vers $INSTALL_DIR..."
 
-if ! command -v git >/dev/null 2>&1; then
+if ! command -v git > /dev/null 2>&1; then
     apt-get update -y && apt-get install -y git
 fi
 
-mkdir -p "$TARGET_DIR"
+mkdir -p "$INSTALL_DIR"
 
-if [[ -d "$TARGET_DIR/.git" ]]; then
-    cd "$TARGET_DIR"
+if [[ -d "$INSTALL_DIR/.git" ]]; then
+    cd "$INSTALL_DIR"
     git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL"
     git fetch origin main
     git reset --hard origin/main
     ok "Dépôt mis à jour via git (origin/main)"
 else
-    # Si l'ancien dossier était /opt/nova-x-tunnel, copier le contenu d'abord ou cloner
-    TEMP_CLONE="/tmp/senpanel-clone-$$"
+    TEMP_CLONE="$(mktemp -d)"
     git clone "$REPO_URL" "$TEMP_CLONE"
-    rsync -a --delete "$TEMP_CLONE/" "$TARGET_DIR/" 2>/dev/null || cp -a "$TEMP_CLONE"/. "$TARGET_DIR/"
+    # Copier en préservant les fichiers de données existants
+    rsync -a --exclude='.env' --exclude='db/' "$TEMP_CLONE/" "$INSTALL_DIR/" 2>/dev/null \
+        || cp -a "$TEMP_CLONE"/. "$INSTALL_DIR/"
     rm -rf "$TEMP_CLONE"
-    ok "Dépôt cloné dans $TARGET_DIR"
+    ok "Dépôt cloné dans $INSTALL_DIR"
 fi
 
 # -----------------------------------------------------------------------------
 # 5. Restauration transparente de la base SQLite et des identifiants
 # -----------------------------------------------------------------------------
 info "Restauration des comptes admin, revendeurs et de la configuration..."
-mkdir -p "$TARGET_DIR/web-panel/db"
+mkdir -p "$INSTALL_DIR/web-panel/db"
 
 if [[ -n "$PRESERVED_PANEL_DB" && -f "$PRESERVED_PANEL_DB" ]]; then
-    cp -a "$PRESERVED_PANEL_DB" "$TARGET_DIR/web-panel/db/panel.sqlite3"
+    cp -a "$PRESERVED_PANEL_DB" "$INSTALL_DIR/web-panel/db/panel.sqlite3"
     ok "Base panel.sqlite3 restaurée avec succès (AUCUN compte revendeur/admin perdu)"
 fi
 
 if [[ -n "$PRESERVED_SESSIONS_DB" && -f "$PRESERVED_SESSIONS_DB" ]]; then
-    cp -a "$PRESERVED_SESSIONS_DB" "$TARGET_DIR/web-panel/db/sessions.sqlite3"
+    cp -a "$PRESERVED_SESSIONS_DB" "$INSTALL_DIR/web-panel/db/sessions.sqlite3"
 fi
 
-if compgen -G "$BACKUP_DIR/web-panel/*.pem" > /dev/null; then
-    cp -a "$BACKUP_DIR/web-panel/"*.pem "$TARGET_DIR/web-panel/db/" 2>/dev/null || true
+if compgen -G "$BACKUP_DIR/web-panel/*.pem" > /dev/null 2>&1; then
+    cp -a "$BACKUP_DIR/web-panel/"*.pem "$INSTALL_DIR/web-panel/db/" 2>/dev/null || true
 fi
 
+# Restaurer ou créer le .env
 if [[ -n "$PRESERVED_ENV" && -f "$PRESERVED_ENV" ]]; then
-    cp -a "$PRESERVED_ENV" "$TARGET_DIR/web-panel/.env"
+    cp -a "$PRESERVED_ENV" "$INSTALL_DIR/web-panel/.env"
+    # S'assurer que PORT est présent dans le .env restauré
+    grep -q '^PORT=' "$INSTALL_DIR/web-panel/.env" \
+        || echo "PORT=${APP_PORT}" >> "$INSTALL_DIR/web-panel/.env"
     ok "Fichier .env restauré avec le secret de session et les réglages d'origine"
-elif [[ ! -f "$TARGET_DIR/web-panel/.env" ]]; then
-    cp "$TARGET_DIR/web-panel/.env.example" "$TARGET_DIR/web-panel/.env"
+elif [[ ! -f "$INSTALL_DIR/web-panel/.env" ]]; then
+    cp "$INSTALL_DIR/web-panel/.env.example" "$INSTALL_DIR/web-panel/.env"
     SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "senpanel-$(date +%s)")
-    sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" "$TARGET_DIR/web-panel/.env"
+    sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" "$INSTALL_DIR/web-panel/.env"
+    sed -i "s|^PORT=.*|PORT=${APP_PORT}|" "$INSTALL_DIR/web-panel/.env"
+    warn ".env créé depuis .env.example — pensez à vérifier les paramètres."
 fi
 
 # -----------------------------------------------------------------------------
-# 6. Maintien de la compatibilité avec l'ancien chemin /opt/nova-x-tunnel
+# 6. Vérification / création du lien de compatibilité novaxtunnel
 # -----------------------------------------------------------------------------
-# Création d'un lien symbolique pour que tout script tiers ou tâche cron
-# pointant sur /opt/nova-x-tunnel continue de fonctionner immédiatement
-if [[ "$OLD_LEGACY_DIR" != "$TARGET_DIR" ]]; then
-    if [[ -d "$OLD_LEGACY_DIR" && ! -L "$OLD_LEGACY_DIR" ]]; then
-        # Déplacer l'ancien dossier en backup
-        mv "$OLD_LEGACY_DIR" "${OLD_LEGACY_DIR}.migrated.$(date +%s)"
-    fi
-    ln -sfn "$TARGET_DIR" "$OLD_LEGACY_DIR"
-    ok "Lien symbolique créé : $OLD_LEGACY_DIR -> $TARGET_DIR"
+# Certains scripts ou crons peuvent encore pointer sur /opt/novaxtunnel
+if [[ ! -e "/opt/novaxtunnel" ]] || [[ -L "/opt/novaxtunnel" ]]; then
+    ln -sfn "$INSTALL_DIR" /opt/novaxtunnel
+    ok "Lien symbolique de compatibilité : /opt/novaxtunnel -> $INSTALL_DIR"
 fi
 
 # -----------------------------------------------------------------------------
 # 7. Mise à jour des dépendances Node.js
 # -----------------------------------------------------------------------------
 info "Vérification de Node.js et des dépendances..."
-if ! command -v node >/dev/null 2>&1; then
+if ! command -v node > /dev/null 2>&1; then
     warn "Node.js manquant, installation de Node.js 20..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
 fi
 
-cd "$TARGET_DIR/web-panel"
+NODE_BIN="$(command -v node)"
+info "Node : $($NODE_BIN --version)"
+
+cd "$INSTALL_DIR/web-panel"
 npm install --omit=dev --silent
 ok "Dépendances Node.js à jour"
 
@@ -209,12 +218,12 @@ ok "Dépendances Node.js à jour"
 # 8. Mise à jour du panel terminal (menu) sans couper les sessions SSH
 # -----------------------------------------------------------------------------
 info "Mise à jour du panel terminal (/usr/local/bin/menu)..."
-cp "$TARGET_DIR/terminal-panel/menu.sh" /usr/local/bin/menu
+cp "$INSTALL_DIR/terminal-panel/menu.sh" /usr/local/bin/menu
 chmod +x /usr/local/bin/menu
-ok "Commande 'menu' mise à jour avec les correctifs OpenSSH 9.8 et limitation wchar"
+ok "Commande 'menu' mise à jour"
 
 # -----------------------------------------------------------------------------
-# 9. Configuration du service systemd novaxpanel
+# 9. Configuration et (re)démarrage du service systemd
 # -----------------------------------------------------------------------------
 info "Mise à jour du service systemd ${SERVICE_NAME}..."
 
@@ -225,11 +234,12 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=${TARGET_DIR}/web-panel
-ExecStart=$(command -v node) ${TARGET_DIR}/web-panel/server.js
+WorkingDirectory=${INSTALL_DIR}/web-panel
+ExecStart=${NODE_BIN} ${INSTALL_DIR}/web-panel/server.js
 Restart=always
 RestartSec=3
 Environment=NODE_ENV=production
+Environment=PORT=${APP_PORT}
 User=root
 
 [Install]
@@ -240,29 +250,55 @@ systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" &>/dev/null || true
 systemctl restart "$SERVICE_NAME"
 
-sleep 2
+sleep 3
 if systemctl is-active --quiet "$SERVICE_NAME"; then
-    ok "Service web panel (${SERVICE_NAME}) démarré et actif"
+    ok "Service web panel (${SERVICE_NAME}) démarré et actif sur le port ${APP_PORT}"
 else
-    warn "Le service web panel n'a pas pu démarrer immédiatement. Consultez journalctl -u $SERVICE_NAME -n 30"
+    warn "Le service web panel n'a pas démarré correctement."
+    journalctl -u "$SERVICE_NAME" -n 30 --no-pager || true
 fi
 
 # -----------------------------------------------------------------------------
-# 10. Rechargement Nginx à chaud (sans coupure)
+# 10. Vérification Nginx et rechargement à chaud
 # -----------------------------------------------------------------------------
-if command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx; then
+if command -v nginx > /dev/null 2>&1 && systemctl is-active --quiet nginx; then
+    # Chercher le fichier de conf nginx du panel
+    NGINX_CONF=""
+    for candidate in \
+        "/etc/nginx/sites-available/nova-panel" \
+        "/etc/nginx/sites-available/novaxpanel" \
+        "/etc/nginx/sites-available/senpanel"
+    do
+        [[ -f "$candidate" ]] && NGINX_CONF="$candidate" && break
+    done
+
+    if [[ -n "$NGINX_CONF" ]]; then
+        # Vérifier que le proxy_pass pointe vers le bon port
+        if ! grep -q "127.0.0.1:${APP_PORT}" "$NGINX_CONF"; then
+            warn "La config Nginx ($NGINX_CONF) ne pointe pas vers le port $APP_PORT — correction..."
+            sed -i "s|proxy_pass http://127\.0\.0\.1:[0-9]*;|proxy_pass http://127.0.0.1:${APP_PORT};|g" "$NGINX_CONF"
+            ok "Config Nginx mise à jour → port $APP_PORT"
+        fi
+    else
+        warn "Aucune configuration Nginx du panel trouvée. Si Nginx est votre proxy, vérifiez manuellement."
+    fi
+
     if nginx -t &>/dev/null; then
         systemctl reload nginx
         ok "Nginx rechargé à chaud sans interruption de service"
+    else
+        warn "La configuration Nginx contient des erreurs — nginx -t pour diagnostiquer."
     fi
 fi
 
 # -----------------------------------------------------------------------------
 # 11. Application des optimisations réseau et WebSocket (senpanel-fix.sh)
 # -----------------------------------------------------------------------------
-info "Application des optimisations non disruptives (WebSocket HAProxy, BBR, OpenSSH)..."
-chmod +x "$TARGET_DIR/senpanel-fix.sh"
-bash "$TARGET_DIR/senpanel-fix.sh" || warn "Certains correctifs non critiques ont signalé un avertissement."
+if [[ -f "$INSTALL_DIR/senpanel-fix.sh" ]]; then
+    info "Application des optimisations non disruptives (WebSocket HAProxy, BBR, OpenSSH)..."
+    chmod +x "$INSTALL_DIR/senpanel-fix.sh"
+    bash "$INSTALL_DIR/senpanel-fix.sh" || warn "Certains correctifs non critiques ont signalé un avertissement."
+fi
 
 # -----------------------------------------------------------------------------
 # 12. Rapport final de vérification
@@ -274,14 +310,13 @@ fi
 
 RESELLERS_COUNT="0"
 ADMINS_COUNT="0"
-if [[ -f "$TARGET_DIR/web-panel/db/panel.sqlite3" ]] && command -v sqlite3 >/dev/null 2>&1; then
-    ADMINS_COUNT=$(sqlite3 "$TARGET_DIR/web-panel/db/panel.sqlite3" "SELECT COUNT(*) FROM admins;" 2>/dev/null || echo "1")
-    RESELLERS_COUNT=$(sqlite3 "$TARGET_DIR/web-panel/db/panel.sqlite3" "SELECT COUNT(*) FROM resellers;" 2>/dev/null || echo "0")
+if [[ -f "$INSTALL_DIR/web-panel/db/panel.sqlite3" ]] && command -v sqlite3 > /dev/null 2>&1; then
+    ADMINS_COUNT=$(sqlite3 "$INSTALL_DIR/web-panel/db/panel.sqlite3" "SELECT COUNT(*) FROM admins;" 2>/dev/null || echo "1")
+    RESELLERS_COUNT=$(sqlite3 "$INSTALL_DIR/web-panel/db/panel.sqlite3" "SELECT COUNT(*) FROM resellers;" 2>/dev/null || echo "0")
 fi
 
-DOMAIN_VAL="$(grep -E '^DOMAIN=' "$TARGET_DIR/web-panel/.env" 2>/dev/null | cut -d'=' -f2- || true)"
-PORT_VAL="$(grep -E '^PORT=' "$TARGET_DIR/web-panel/.env" 2>/dev/null | cut -d'=' -f2- || echo '3000')"
-PUBLIC_PORT_VAL="$(grep -E '^PUBLIC_PORT=' "$TARGET_DIR/web-panel/.env" 2>/dev/null | cut -d'=' -f2- || true)"
+DOMAIN_VAL="$(grep -E '^DOMAIN=' "$INSTALL_DIR/web-panel/.env" 2>/dev/null | cut -d'=' -f2- || true)"
+PUBLIC_PORT_VAL="$(grep -E '^PUBLIC_PORT=' "$INSTALL_DIR/web-panel/.env" 2>/dev/null | cut -d'=' -f2- || true)"
 
 echo
 echo -e "${C_GREEN}==========================================================${C_RESET}"
@@ -293,11 +328,10 @@ echo -e "  • Comptes revendeurs préservés  : ${C_CYAN}${RESELLERS_COUNT}${C_
 echo -e "  • Compte administrateur         : ${C_CYAN}Préservé avec son mot de passe existant${C_RESET}"
 echo
 echo -e "Services en ligne :"
-systemctl is-active --quiet "$SERVICE_NAME" && echo -e "  • Web Panel (${SERVICE_NAME}) : ${C_GREEN}ACTIF${C_RESET}" || echo -e "  • Web Panel : ${C_YELLOW}A VERIFIER${C_RESET}"
-(systemctl is-active --quiet sshd || systemctl is-active --quiet ssh) && echo -e "  • SSH Server            : ${C_GREEN}ACTIF (connexions maintenues)${C_RESET}"
-systemctl is-active --quiet haproxy && echo -e "  • HAProxy               : ${C_GREEN}ACTIF${C_RESET}"
-systemctl is-active --quiet nginx && echo -e "  • Nginx                 : ${C_GREEN}ACTIF${C_RESET}"
-systemctl is-active --quiet pyproxy-ws && echo -e "  • WebSocket Proxy (444) : ${C_GREEN}ACTIF${C_RESET}"
+systemctl is-active --quiet "$SERVICE_NAME"  && echo -e "  • Web Panel (${SERVICE_NAME}) : ${C_GREEN}ACTIF${C_RESET}" || echo -e "  • Web Panel : ${C_YELLOW}A VERIFIER${C_RESET}"
+(systemctl is-active --quiet sshd || systemctl is-active --quiet ssh) && echo -e "  • SSH Server            : ${C_GREEN}ACTIF (connexions maintenues)${C_RESET}" || true
+systemctl is-active --quiet haproxy && echo -e "  • HAProxy               : ${C_GREEN}ACTIF${C_RESET}" || true
+systemctl is-active --quiet nginx   && echo -e "  • Nginx                 : ${C_GREEN}ACTIF${C_RESET}" || true
 echo
 if [[ -n "$DOMAIN_VAL" ]]; then
     if [[ -n "$PUBLIC_PORT_VAL" && "$PUBLIC_PORT_VAL" != "443" && "$PUBLIC_PORT_VAL" != "80" ]]; then
@@ -306,6 +340,8 @@ if [[ -n "$DOMAIN_VAL" ]]; then
         echo -e "Accès panel web : ${C_CYAN}https://${DOMAIN_VAL}${C_RESET}"
     fi
 fi
-echo -e "Dossier d'installation   : ${TARGET_DIR}"
+echo -e "Port Node interne : ${APP_PORT}"
+echo -e "Dossier d'installation   : ${INSTALL_DIR}"
 echo -e "Sauvegarde de secours    : ${BACKUP_DIR}"
+echo -e "Logs en temps réel       : journalctl -u ${SERVICE_NAME} -f"
 echo -e "${C_GREEN}==========================================================${C_RESET}"
