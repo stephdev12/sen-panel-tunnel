@@ -111,11 +111,17 @@ if [[ -n "$SOURCE_DIR" && -d "$SOURCE_DIR/web-panel" ]]; then
     fi
 
     if compgen -G "$SOURCE_DIR/web-panel/db/panel.sqlite3*" > /dev/null 2>&1; then
-        cp -a "$SOURCE_DIR/web-panel/db/panel.sqlite3"* "$BACKUP_DIR/web-panel/"
+        if command -v sqlite3 > /dev/null 2>&1; then
+            sqlite3 "$SOURCE_DIR/web-panel/db/panel.sqlite3" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+        fi
+        cp -af "$SOURCE_DIR/web-panel/db/panel.sqlite3"* "$BACKUP_DIR/web-panel/"
         PRESERVED_PANEL_DB="$BACKUP_DIR/web-panel/panel.sqlite3"
         ok "Base de données panel.sqlite3 (et fichiers WAL) sauvegardée"
     elif [[ -f "$SOURCE_DIR/web-panel/panel.sqlite3" ]]; then
-        cp -a "$SOURCE_DIR/web-panel/panel.sqlite3"* "$BACKUP_DIR/web-panel/"
+        if command -v sqlite3 > /dev/null 2>&1; then
+            sqlite3 "$SOURCE_DIR/web-panel/panel.sqlite3" "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+        fi
+        cp -af "$SOURCE_DIR/web-panel/panel.sqlite3"* "$BACKUP_DIR/web-panel/"
         PRESERVED_PANEL_DB="$BACKUP_DIR/web-panel/panel.sqlite3"
         ok "Base de données panel.sqlite3 sauvegardée"
     fi
@@ -169,8 +175,10 @@ info "Restauration des comptes admin, revendeurs et de la configuration..."
 mkdir -p "$INSTALL_DIR/web-panel/db"
 
 if [[ -n "$PRESERVED_PANEL_DB" && -f "$PRESERVED_PANEL_DB" ]]; then
-    cp -a "$BACKUP_DIR/web-panel/panel.sqlite3"* "$INSTALL_DIR/web-panel/db/"
-    ok "Base panel.sqlite3 (et fichiers WAL) restaurée avec succès (AUCUN compte revendeur/admin perdu)"
+    # Éviter tout conflit de fichiers mémoire WAL obsolètes
+    rm -f "$INSTALL_DIR/web-panel/db/panel.sqlite3"*
+    cp -af "$BACKUP_DIR/web-panel/panel.sqlite3"* "$INSTALL_DIR/web-panel/db/"
+    ok "Base panel.sqlite3 restaurée avec succès (AUCUN compte revendeur/admin perdu)"
 fi
 
 if [[ -n "$PRESERVED_SESSIONS_DB" && -f "$PRESERVED_SESSIONS_DB" ]]; then
@@ -221,6 +229,16 @@ info "Node : $($NODE_BIN --version)"
 cd "$INSTALL_DIR/web-panel"
 npm install --omit=dev --silent
 ok "Dépendances Node.js à jour"
+
+info "Validation de la base de données et application des migrations..."
+node -e "
+try {
+  const db = require('./db/database');
+  console.log('[OK] Base SQLite connectée et vérifiée.');
+} catch (e) {
+  console.error('[WARN] Erreur chargement base:', e.message);
+}
+" || true
 
 if [[ -f "$INSTALL_DIR/web-panel/deploy/sync-app-passwords.js" ]]; then
     info "Synchronisation des mots de passe SSH des comptes app..."
