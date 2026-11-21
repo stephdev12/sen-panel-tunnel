@@ -242,13 +242,16 @@ router.get('/servers', (req, res) => {
 router.post('/activate', express.json(), (req, res) => {
   try {
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    const { key, deviceId, publicKey, appVersion, lang, platform } = req.body;
+    const rawKey = req.body.key || req.body.activation_key || req.body.activationKey;
+    const rawDeviceId = req.body.deviceId || req.body.device_id || req.headers['x-device-id'];
+    const { publicKey, appVersion, lang, platform } = req.body;
 
-    if (!key || !deviceId) {
+    if (!rawKey || !rawDeviceId) {
       return res.status(400).json({ error: 'invalid_key', message: 'Clé ou ID appareil manquant.' });
     }
 
-    const cleanDeviceId = String(deviceId).trim();
+    const key = String(rawKey).trim();
+    const cleanDeviceId = String(rawDeviceId).trim();
     if (cleanDeviceId.length < 3) {
       return res.status(400).json({ error: 'invalid_device_id', message: 'Format d\'ID appareil invalide.' });
     }
