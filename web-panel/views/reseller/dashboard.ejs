@@ -94,7 +94,7 @@
           <thead>
             <tr>
               <th>Identifiant</th>
-              <th>ID Appareil</th>
+              <th>Appareils</th>
               <th>Profil</th>
               <th>Statut</th>
               <th>Consommation / Quota</th>
@@ -107,7 +107,20 @@
             <% surfeoAccounts.forEach(a => { %>
             <tr>
               <td><b><%= a.username %></b></td>
-              <td><code class="mono"><%= a.device_id %></code></td>
+              <td>
+                <b style="color:var(--accent);"><%= a.devices ? a.devices.length : (a.device_id ? 1 : 0) %> / <%= a.max_devices || 2 %></b>
+                <% if (a.devices && a.devices.length > 0) { %>
+                  <div style="font-size:10px; color:var(--muted); margin-top:2px;">
+                    <% a.devices.forEach(d => { %>
+                      <span class="pill" style="font-size:9px; padding:1px 5px;"><%= d.device_platform || 'device' %></span>
+                    <% }) %>
+                  </div>
+                <% } else if (a.device_id) { %>
+                  <div style="font-size:10px; color:var(--muted);"><code class="mono"><%= a.device_id.slice(0, 9) %>...</code></div>
+                <% } else { %>
+                  <div style="font-size:10px; color:var(--muted);">En attente</div>
+                <% } %>
+              </td>
               <td><%= a.profile_name || '-' %> (v<%= a.profile_version || '1' %>)</td>
               <td>
                 <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'locked_manual' : 'locked_expired') %>">
@@ -134,8 +147,11 @@
               <td class="mono" style="font-size:12px;"><%= a.last_active_at ? a.last_active_at.replace('T', ' ').slice(0, 19) : 'Jamais' %></td>
               <td>
                 <div style="display:flex; gap:6px;">
-                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/regenerate-key" onsubmit="return confirm('Générer une nouvelle clé pour cet appareil ?');">
+                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/regenerate-key" onsubmit="return confirm('Générer une nouvelle clé pour ce compte ?');">
                     <button type="submit" class="btn small subtle" title="Régénérer la clé">Clé</button>
+                  </form>
+                  <form method="POST" action="/reseller/app-accounts/<%= a.id %>/reset-devices" onsubmit="return confirm('Dissocier tous les appareils liés ?');">
+                    <button type="submit" class="btn small subtle" title="Dissocier les appareils">Délier</button>
                   </form>
                   <form method="POST" action="/reseller/surfeo/<%= a.id %>/delete" onsubmit="return confirm('Supprimer ce compte Surfeo ?');">
                     <button type="submit" class="btn small error">Suppr</button>
@@ -154,17 +170,21 @@
     <% if (surfeoAccounts.length < (reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5)) { %>
     <div class="panel">
       <div class="panel-head">
-        <h2>Créer un compte client Surfeo (App Mobile)</h2>
+        <h2>Créer une clé client Surfeo (Multi-appareils)</h2>
       </div>
       <form method="POST" action="/reseller/surfeo/create" style="padding:16px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;">
           <div>
             <label for="username">Identifiant SSH</label>
             <input type="text" id="username" name="username" required placeholder="ex: client01">
           </div>
           <div>
-            <label for="device_id">ID Appareil (fourni par le client)</label>
-            <input type="text" id="device_id" name="device_id" required placeholder="ex: ABCD-EFGH-JKMN-P" style="text-transform:uppercase;">
+            <label for="device_id">ID Appareil (Optionnel)</label>
+            <input type="text" id="device_id" name="device_id" placeholder="Vide = auto-liaison">
+          </div>
+          <div>
+            <label for="max_devices">Max appareils</label>
+            <input type="number" id="max_devices" name="max_devices" value="2" min="1" max="10">
           </div>
         </div>
 

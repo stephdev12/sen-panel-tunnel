@@ -116,9 +116,36 @@ CREATE INDEX IF NOT EXISTS idx_app_accounts_user ON app_accounts(username);
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN quota_gb REAL DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN expiry_date TEXT'); } catch {}
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN password TEXT'); } catch {}
+try { db.exec('ALTER TABLE app_accounts ADD COLUMN max_devices INTEGER DEFAULT 2'); } catch {}
 try { db.exec('ALTER TABLE resellers ADD COLUMN max_surfeo_users INTEGER DEFAULT 5'); } catch {}
 try { db.exec('ALTER TABLE resellers ADD COLUMN surfeo_quota_gb REAL'); } catch {}
 try { db.exec('ALTER TABLE app_accounts ADD COLUMN reseller_id INTEGER REFERENCES resellers(id) ON DELETE CASCADE'); } catch {}
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS app_account_devices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  app_account_id INTEGER NOT NULL REFERENCES app_accounts(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL,
+  device_platform TEXT DEFAULT 'unknown',
+  app_version TEXT DEFAULT '1.0.0',
+  activated_at TEXT DEFAULT (datetime('now')),
+  last_active_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(app_account_id, device_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_acc_devices_dev ON app_account_devices(device_id);
+CREATE INDEX IF NOT EXISTS idx_acc_devices_acc ON app_account_devices(app_account_id);
+`);
+
+// Backwards-compatible migration: seed existing active device_id values into app_account_devices
+try {
+  db.exec(`
+    INSERT OR IGNORE INTO app_account_devices (app_account_id, device_id, device_platform, activated_at, last_active_at)
+    SELECT id, device_id, 'legacy', activated_at, last_active_at
+    FROM app_accounts
+    WHERE device_id IS NOT NULL AND device_id != '';
+  `);
+} catch (e) {}
 
 db.exec(`
 

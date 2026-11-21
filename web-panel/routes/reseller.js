@@ -66,11 +66,14 @@ router.get('/', (req, res) => {
     const quotaGb = parseFloat(a.quota_gb) || 0;
     const quotaBytes = quotaGb > 0 ? Math.round(quotaGb * 1024 * 1024 * 1024) : 0;
     const percent = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0;
+    const devices = db.prepare('SELECT id, device_id, device_platform, app_version, last_active_at FROM app_account_devices WHERE app_account_id = ?').all(a.id);
     return {
       ...a,
       usedBytes,
       quotaBytes,
-      percentUsed: percent
+      percentUsed: percent,
+      devices,
+      max_devices: a.max_devices || 2
     };
   });
 
@@ -205,10 +208,12 @@ router.post('/surfeo/create', (req, res) => {
       throw new Error(`Le quota demandé (${requestedQuota} Go) dépasse votre quota alloué (${reseller.surfeo_quota_gb} Go).`);
     }
 
-    const formattedDeviceId = formatDeviceId(device_id);
-    if (!validateDeviceId(formattedDeviceId)) {
-      throw new Error('Format d\'ID appareil invalide (attendu: XXXX-XXXX-XXXX-X).');
+    let formattedDeviceId = '';
+    if (device_id && device_id.trim()) {
+      formattedDeviceId = formatDeviceId(device_id.trim());
     }
+
+    const maxDev = Math.max(1, parseInt(req.body.max_devices, 10) || 2);
 
     const profile = db.prepare('SELECT * FROM connection_profiles WHERE id = ?').get(profile_id);
     if (!profile) throw new Error('Profil de connexion sélectionné introuvable.');
@@ -222,27 +227,36 @@ router.post('/surfeo/create', (req, res) => {
       username,
       password: finalPassword,
       expiryDate: expiry_date || '',
-      maxConnections: 1,
+      maxConnections: maxDev,
       quotaGb: quota_gb === '' ? null : parseFloat(quota_gb)
     });
 
     const insertAccount = db.prepare(`
-      INSERT INTO app_accounts (username, type, profile_id, device_id, state, quota_gb, expiry_date, password, reseller_id)
-      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
-    `).run(username, type || 'ssh', profile_id, formattedDeviceId, parseFloat(quota_gb) || 0, expiry_date || '', finalPassword, reseller.id);
+      INSERT INTO app_accounts (username, type, profile_id, device_id, state, quota_gb, expiry_date, password, reseller_id, max_devices)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+    `).run(username, type || 'ssh', profile_id, formattedDeviceId, parseFloat(quota_gb) || 0, expiry_date || '', finalPassword, reseller.id, maxDev);
 
     const accountId = insertAccount.lastInsertRowid;
+
+    if (formattedDeviceId) {
+      db.prepare(`
+        INSERT OR IGNORE INTO app_account_devices (app_account_id, device_id, device_platform, activated_at, last_active_at)
+        VALUES (?, ?, 'manual', datetime('now'), datetime('now'))
+      `).run(accountId, formattedDeviceId);
+    }
+
     const actKey = createActivationKey();
     db.prepare(`
       INSERT INTO activation_keys (app_account_id, key_hash, key_last4, status)
       VALUES (?, ?, ?, 'unused')
     `).run(accountId, actKey.keyHash, actKey.keyLast4);
 
-    audit.log('reseller', reseller.username, 'app_account_create', `Création du compte Surfeo "${username}" pour ${formattedDeviceId}`, accountId);
+    audit.log('reseller', reseller.username, 'app_account_create', `Création du compte Surfeo "${username}" (max ${maxDev} appareils)`, accountId);
 
     req.session.createdKey = {
       username,
-      deviceId: formattedDeviceId,
+      deviceId: formattedDeviceId || 'Auto (à l\'activation)',
+      maxDevices: maxDev,
       key: actKey.key,
       serverCode: actKey.serverCode
     };
@@ -252,6 +266,28 @@ router.post('/surfeo/create', (req, res) => {
     res.redirect('/reseller?error=' + encodeURIComponent(e.message));
   }
 });
+
+// Reset devices for reseller app account
+function handleResetDevices(req, res) {
+  const reseller = req.reseller;
+  const id = req.params.id;
+  try {
+    const acc = db.prepare('SELECT * FROM app_accounts WHERE id = ? AND reseller_id = ?').get(id, reseller.id);
+    if (!acc) throw new Error('Compte Surfeo introuvable ou non autorisé.');
+
+    db.prepare('DELETE FROM app_account_devices WHERE app_account_id = ?').run(id);
+    db.prepare("UPDATE app_accounts SET device_id = '' WHERE id = ?").run(id);
+
+    audit.log('reseller', reseller.username, 'app_account_reset_devices', `Dissociation des appareils pour "${acc.username}"`, id);
+
+    res.redirect('/reseller?success=' + encodeURIComponent(`Les appareils pour ${acc.username} ont été dissociés.`));
+  } catch (e) {
+    res.redirect('/reseller?error=' + encodeURIComponent(e.message));
+  }
+}
+
+router.post('/app-accounts/:id/reset-devices', handleResetDevices);
+router.post('/surfeo/:id/reset-devices', handleResetDevices);
 
 router.post('/surfeo/:id/regenerate-key', (req, res) => {
   const reseller = loadSelf(req);

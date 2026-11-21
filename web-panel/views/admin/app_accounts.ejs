@@ -56,7 +56,7 @@
           <thead>
             <tr>
               <th>Identifiant</th>
-              <th>ID Appareil</th>
+              <th>Appareils liés</th>
               <th>Créé par</th>
               <th>Profil</th>
               <th>Statut</th>
@@ -70,7 +70,22 @@
             <% accounts.forEach(a => { %>
             <tr>
               <td><b><%= a.username %></b></td>
-              <td><code class="mono"><%= a.device_id %></code></td>
+              <td>
+                <b style="color:var(--accent);"><%= a.devices ? a.devices.length : (a.device_id ? 1 : 0) %> / <%= a.max_devices || 2 %></b>
+                <% if (a.devices && a.devices.length > 0) { %>
+                  <div style="font-size:11px; color:var(--muted); margin-top:2px; display:flex; flex-wrap:wrap; gap:4px;">
+                    <% a.devices.forEach(d => { %>
+                      <span class="pill" style="font-size:10px; padding:1px 6px; text-transform:capitalize;" title="ID: <%= d.device_id %> (v<%= d.app_version %>)">
+                        <%= d.device_platform || 'device' %>
+                      </span>
+                    <% }) %>
+                  </div>
+                <% } else if (a.device_id) { %>
+                  <div style="font-size:11px; color:var(--muted);"><code class="mono"><%= a.device_id.slice(0, 9) %>...</code></div>
+                <% } else { %>
+                  <div style="font-size:11px; color:var(--muted);">En attente de liaison</div>
+                <% } %>
+              </td>
               <td>
                 <span class="pill" style="font-size:11px; <%= a.reseller_name ? 'background:rgba(124,92,255,0.15); color:var(--violet);' : 'background:rgba(34,211,238,0.15); color:var(--accent);' %>">
                   <%= a.reseller_name ? a.reseller_name : 'Admin' %>
@@ -102,10 +117,12 @@
               <td class="mono" style="font-size:12px;"><%= a.last_active_at ? a.last_active_at.replace('T', ' ').slice(0, 19) : 'Jamais' %></td>
               <td>
                 <div style="display:flex; gap:6px;">
-                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/regenerate-key" onsubmit="return confirm('Régénérer une nouvelle clé pour cet appareil ?');">
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/regenerate-key" onsubmit="return confirm('Régénérer une nouvelle clé pour ce compte ?');">
                     <button type="submit" class="btn small subtle" title="Régénérer la clé">Clé</button>
                   </form>
-                  <button type="button" class="btn small subtle" onclick="promptChangeDevice('<%= a.id %>', '<%= a.username %>', '<%= a.device_id %>')">ID</button>
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/reset-devices" onsubmit="return confirm('Dissocier tous les appareils liés à ce compte pour permettre d\'en enregistrer de nouveaux ?');">
+                    <button type="submit" class="btn small subtle" title="Dissocier tous les appareils">Délier</button>
+                  </form>
                   <form method="POST" action="/admin/app-accounts/<%= a.id %>/revoke" onsubmit="return confirm('Révoquer ce compte ?');">
                     <button type="submit" class="btn small warning">Révoquer</button>
                   </form>
@@ -125,7 +142,7 @@
     <!-- Create App Account Form -->
     <div class="panel">
       <div class="panel-head">
-        <h2>Lier un nouvel appareil (Créer un forfait app)</h2>
+        <h2>Créer un forfait app (Clé multi-appareils)</h2>
       </div>
       <form method="POST" action="/admin/app-accounts/create" style="padding:16px;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
@@ -139,10 +156,17 @@
           </div>
         </div>
 
-        <div style="margin-top:16px;">
-          <label for="device_id">ID de l'appareil (13 caractères au format XXXX-XXXX-XXXX-X)</label>
-          <input type="text" id="device_id" name="device_id" required placeholder="ex: 3KJ7-89BM-PQ2R-W" style="font-family:monospace; font-size:15px; font-weight:bold;">
-          <small style="color:var(--muted);">Requis. Doit être fourni par l'utilisateur depuis son écran d'accueil Surfeo.</small>
+        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:16px; margin-top:16px;">
+          <div>
+            <label for="device_id">ID de l'appareil (Optionnel)</label>
+            <input type="text" id="device_id" name="device_id" placeholder="Laisser vide pour auto-liaison lors de la 1ère connexion" style="font-family:monospace; font-size:14px;">
+            <small style="color:var(--muted);">Optionnel. Si laissé vide, l'appareil s'associera automatiquement lors de la première utilisation de la clé.</small>
+          </div>
+          <div>
+            <label for="max_devices">Nombre max d'appareils</label>
+            <input type="number" id="max_devices" name="max_devices" value="2" min="1" max="100" required>
+            <small style="color:var(--muted);">Quota d'appareils autorisés</small>
+          </div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px;">
@@ -167,7 +191,7 @@
           </div>
           <div>
             <label for="max_connections">Limite de sessions simultanées</label>
-            <input type="number" id="max_connections" name="max_connections" value="1">
+            <input type="number" id="max_connections" name="max_connections" value="2">
           </div>
         </div>
 

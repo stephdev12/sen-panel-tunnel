@@ -42,11 +42,14 @@ router.get('/', (req, res) => {
     const quotaGb = parseFloat(a.quota_gb) || 0;
     const quotaBytes = quotaGb > 0 ? Math.round(quotaGb * 1024 * 1024 * 1024) : 0;
     const percent = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0;
+    const devices = db.prepare('SELECT id, device_id, device_platform, app_version, last_active_at FROM app_account_devices WHERE app_account_id = ?').all(a.id);
     return {
       ...a,
       usedBytes,
       quotaBytes,
-      percentUsed: percent
+      percentUsed: percent,
+      devices,
+      max_devices: a.max_devices || 2
     };
   });
 
@@ -66,15 +69,17 @@ router.get('/', (req, res) => {
 // Create app-linked account
 router.post('/create', (req, res) => {
   try {
-    const { username, password, device_id, type, profile_id, expiry_date, quota_gb, max_connections } = req.body;
-    if (!username || !device_id || !profile_id) {
-      throw new Error('Nom d\'utilisateur, ID appareil et profil sont requis.');
+    const { username, password, device_id, type, profile_id, expiry_date, quota_gb, max_connections, max_devices } = req.body;
+    if (!username || !profile_id) {
+      throw new Error('Nom d\'utilisateur et profil de connexion sont requis.');
     }
 
-    const formattedDeviceId = formatDeviceId(device_id);
-    if (!validateDeviceId(formattedDeviceId)) {
-      throw new Error('Format d\'ID appareil invalide (attendu: XXXX-XXXX-XXXX-X, Crockford base32 valide).');
+    let formattedDeviceId = '';
+    if (device_id && device_id.trim()) {
+      formattedDeviceId = formatDeviceId(device_id.trim());
     }
+
+    const maxDev = Math.max(1, parseInt(max_devices, 10) || 2);
 
     const profile = db.prepare('SELECT * FROM connection_profiles WHERE id = ?').get(profile_id);
     if (!profile) throw new Error('Profil de connexion sélectionné introuvable.');
@@ -90,17 +95,24 @@ router.post('/create', (req, res) => {
       username,
       password: finalPassword,
       expiryDate: expiry_date || '',
-      maxConnections: parseInt(max_connections, 10) || 1,
+      maxConnections: parseInt(max_connections, 10) || maxDev,
       quotaGb: quota_gb === '' ? null : parseFloat(quota_gb)
     });
 
     // Insert into app_accounts
     const insertAccount = db.prepare(`
-      INSERT INTO app_accounts (username, type, profile_id, device_id, state, quota_gb, expiry_date, password)
-      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
-    `).run(username, type || 'ssh', profile_id, formattedDeviceId, parseFloat(quota_gb) || 0, expiry_date || '', finalPassword);
+      INSERT INTO app_accounts (username, type, profile_id, device_id, state, quota_gb, expiry_date, password, max_devices)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+    `).run(username, type || 'ssh', profile_id, formattedDeviceId, parseFloat(quota_gb) || 0, expiry_date || '', finalPassword, maxDev);
 
     const accountId = insertAccount.lastInsertRowid;
+
+    if (formattedDeviceId) {
+      db.prepare(`
+        INSERT OR IGNORE INTO app_account_devices (app_account_id, device_id, device_platform, activated_at, last_active_at)
+        VALUES (?, ?, 'manual', datetime('now'), datetime('now'))
+      `).run(accountId, formattedDeviceId);
+    }
 
     // Generate activation key
     const actKey = createActivationKey();
@@ -109,17 +121,36 @@ router.post('/create', (req, res) => {
       VALUES (?, ?, ?, 'unused')
     `).run(accountId, actKey.keyHash, actKey.keyLast4);
 
-    audit.log('admin', req.session.username, 'app_account_create', `Création du compte app "${username}" lié à ${formattedDeviceId}`);
+    audit.log('admin', req.session.username, 'app_account_create', `Création du compte app "${username}" (max ${maxDev} appareils)`);
 
     // Store created key in session to display once
     req.session.createdKey = {
       username,
-      deviceId: formattedDeviceId,
+      deviceId: formattedDeviceId || 'Auto (à l\'activation)',
+      maxDevices: maxDev,
       key: actKey.key,
       serverCode: actKey.serverCode
     };
 
     res.redirect('/admin/app-accounts?success=' + encodeURIComponent(`Compte ${username} créé avec succès.`));
+  } catch (e) {
+    res.redirect('/admin/app-accounts?error=' + encodeURIComponent(e.message));
+  }
+});
+
+// Reset/unbind all devices for an account
+router.post('/:id/reset-devices', (req, res) => {
+  const id = req.params.id;
+  try {
+    const account = db.prepare('SELECT * FROM app_accounts WHERE id = ?').get(id);
+    if (!account) throw new Error('Compte introuvable.');
+
+    db.prepare('DELETE FROM app_account_devices WHERE app_account_id = ?').run(id);
+    db.prepare("UPDATE app_accounts SET device_id = '' WHERE id = ?").run(id);
+
+    audit.log('admin', req.session.username, 'app_account_reset_devices', `Dissociation des appareils pour "${account.username}"`);
+
+    res.redirect('/admin/app-accounts?success=' + encodeURIComponent(`Les appareils du compte ${account.username} ont été dissociés avec succès.`));
   } catch (e) {
     res.redirect('/admin/app-accounts?error=' + encodeURIComponent(e.message));
   }

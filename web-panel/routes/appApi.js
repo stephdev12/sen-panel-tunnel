@@ -237,30 +237,29 @@ router.get('/servers', (req, res) => {
 
 // -------------------------------------------------------------
 // POST /api/app/v1/activate
-// Activates key and binds device public key
+// Activates key and binds device public key (Multi-device support with max_devices quota)
 // -------------------------------------------------------------
 router.post('/activate', express.json(), (req, res) => {
   try {
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    const { key, deviceId, publicKey, appVersion, lang } = req.body;
+    const { key, deviceId, publicKey, appVersion, lang, platform } = req.body;
 
     if (!key || !deviceId) {
       return res.status(400).json({ error: 'invalid_key', message: 'Clé ou ID appareil manquant.' });
     }
 
+    const cleanDeviceId = String(deviceId).trim();
+    if (cleanDeviceId.length < 3) {
+      return res.status(400).json({ error: 'invalid_device_id', message: 'Format d\'ID appareil invalide.' });
+    }
+
     // Rate limit check
     const ipLimit = checkRateLimit(`ip:${ip}`);
-    const devLimit = checkRateLimit(`dev:${deviceId}`);
+    const devLimit = checkRateLimit(`dev:${cleanDeviceId}`);
     if (ipLimit.limited || devLimit.limited) {
       const retryAfter = Math.max(ipLimit.retryAfter || 0, devLimit.retryAfter || 0);
       res.setHeader('Retry-After', retryAfter);
       return res.status(429).json({ error: 'rate_limited', message: `Trop d'essais. Réessayez dans ${retryAfter}s.` });
-    }
-
-    // Validate Device ID format
-    const formattedDeviceId = formatDeviceId(deviceId);
-    if (!validateDeviceId(formattedDeviceId)) {
-      return res.status(400).json({ error: 'invalid_device_id', message: 'Format d\'ID appareil invalide.' });
     }
 
     // Find key by hash
@@ -280,27 +279,50 @@ router.post('/activate', express.json(), (req, res) => {
       return res.status(404).json({ error: 'account_not_found', message: 'Compte associé introuvable.' });
     }
 
-    if (keyRecord.status === 'used') {
-      // If already used, check if it's the exact same device re-requesting
-      if (appAccount.device_id !== formattedDeviceId) {
-        return res.status(403).json({ error: 'device_mismatch', message: 'Cette clé est liée à un autre appareil.' });
-      }
-    }
-
-    // Device binding check
-    if (appAccount.device_id !== formattedDeviceId) {
-      return res.status(403).json({ error: 'device_mismatch', message: 'La clé ne correspond pas à cet appareil.' });
-    }
-
     if (appAccount.state === 'revoked' || appAccount.state === 'deleted') {
       return res.status(410).json({ error: 'expired_or_revoked', message: 'Compte révoqué ou supprimé.' });
     }
 
-    // Update account with public key and activate
+    const maxDevices = parseInt(appAccount.max_devices, 10) || 2;
+    const devPlatform = String(platform || req.headers['x-device-platform'] || 'unknown').toLowerCase();
+
+    // Check if this device is already registered for this account
+    const existingDevice = db.prepare(
+      'SELECT * FROM app_account_devices WHERE app_account_id = ? AND device_id = ?'
+    ).get(appAccount.id, cleanDeviceId);
+
+    if (!existingDevice) {
+      // Check current device count
+      const deviceCount = db.prepare(
+        'SELECT COUNT(*) AS count FROM app_account_devices WHERE app_account_id = ?'
+      ).get(appAccount.id).count;
+
+      if (deviceCount >= maxDevices) {
+        return res.status(403).json({
+          error: 'max_devices_reached',
+          message: `Limite maximale d'appareils atteinte (${deviceCount}/${maxDevices} autorisés). Dissociez un appareil depuis le panneau ou contactez le support.`
+        });
+      }
+
+      // Register new device
+      db.prepare(`
+        INSERT INTO app_account_devices (app_account_id, device_id, device_platform, app_version, activated_at, last_active_at)
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(appAccount.id, cleanDeviceId, devPlatform, appVersion || '1.0.0');
+    } else {
+      // Existing device: update timestamps and platform
+      db.prepare(`
+        UPDATE app_account_devices
+        SET last_active_at = datetime('now'), app_version = ?, device_platform = ?
+        WHERE id = ?
+      `).run(appVersion || '1.0.0', devPlatform, existingDevice.id);
+    }
+
+    // Update account state and keys
     const now = new Date().toISOString();
     db.prepare(`
       UPDATE app_accounts
-      SET public_key = ?, state = 'active', activated_at = COALESCE(activated_at, ?), last_active_at = ?, app_version = ?
+      SET public_key = COALESCE(NULLIF(?, ''), public_key), state = 'active', activated_at = COALESCE(activated_at, ?), last_active_at = ?, app_version = ?
       WHERE id = ?
     `).run(publicKey || '', now, now, appVersion || '1.0.0', appAccount.id);
     appAccount.state = 'active';
@@ -356,10 +378,22 @@ function requireDeviceAuth(req, res, next) {
       return res.status(401).json({ error: 'missing_device_id', message: 'En-tête X-Device-Id manquant.' });
     }
 
-    const formattedId = formatDeviceId(deviceIdHeader);
-    const appAccount = db.prepare('SELECT * FROM app_accounts WHERE device_id = ?').get(formattedId);
+    const cleanDeviceId = String(deviceIdHeader).trim();
+
+    // 1. Look up in app_account_devices table
+    let appAccount = null;
+    const deviceRecord = db.prepare('SELECT * FROM app_account_devices WHERE device_id = ?').get(cleanDeviceId);
+    if (deviceRecord) {
+      appAccount = db.prepare('SELECT * FROM app_accounts WHERE id = ?').get(deviceRecord.app_account_id);
+      db.prepare("UPDATE app_account_devices SET last_active_at = datetime('now') WHERE id = ?").run(deviceRecord.id);
+    } else {
+      // Fallback for legacy Crockford device_id in app_accounts
+      const formattedId = formatDeviceId(cleanDeviceId);
+      appAccount = db.prepare('SELECT * FROM app_accounts WHERE device_id = ?').get(formattedId);
+    }
+
     if (!appAccount) {
-      return res.status(404).json({ error: 'account_not_found', message: 'Appareil non enregistré.' });
+      return res.status(404).json({ error: 'account_not_found', message: 'Appareil non enregistré ou dissocié.' });
     }
 
     if (appAccount.state === 'revoked' || appAccount.state === 'deleted') {
