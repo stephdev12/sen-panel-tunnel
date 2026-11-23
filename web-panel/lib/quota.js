@@ -6,18 +6,13 @@ function getActiveClients(resellerId) {
 }
 
 function getAllocatedQuotaSum(resellerId) {
-  // Sum of quota_gb for active clients that have a finite quota (NULL/unlimited clients don't add a number here,
-  // they are blocked separately - a reseller with a finite total quota cannot hand out an "unlimited" client).
   const row = db.prepare(
     `SELECT COALESCE(SUM(quota_gb), 0) AS total FROM clients WHERE reseller_id = ? AND deleted = 0 AND quota_gb IS NOT NULL`
   ).get(resellerId);
   return row.total;
 }
 
-// Sum of max_connections across all non-deleted SSH clients - i.e. the total simultaneous
-// connection capacity the reseller has already handed out. Locked/expired clients still
-// count (same convention as getAllocatedQuotaSum): they could be unlocked at any time and
-// their reserved slots must not be silently double-booked to another client in the meantime.
+// Somme des connexions simultanées allouées aux clients SSH
 function getAllocatedConnectionsSum(resellerId, excludeClientId) {
   const row = db.prepare(
     `SELECT COALESCE(SUM(max_connections), 0) AS total FROM clients
@@ -29,7 +24,6 @@ function getAllocatedConnectionsSum(resellerId, excludeClientId) {
 function getResellerStats(reseller) {
   const active = getActiveClients(reseller.id);
   const allocated = getAllocatedQuotaSum(reseller.id);
-  const totalCommitted = allocated + (reseller.consumed_quota_gb || 0);
   const allocatedConnections = getAllocatedConnectionsSum(reseller.id);
 
   const clientsLib = require('./clients');
@@ -40,6 +34,8 @@ function getResellerStats(reseller) {
   let onlineTotal = 0;
   let lockedCount = 0;
   let expiredCount = 0;
+
+  // Calcul du trafic réel des clients actifs
   const clientsWithLive = active.map((c) => {
     const usageGb = clientsLib.clientUsageGb(c);
     if (usageGb != null) consumedActiveGb += usageGb;
@@ -50,6 +46,25 @@ function getResellerStats(reseller) {
     return { ...c, _online: online, usageGb: usageGb };
   });
 
+  // Prise en compte également de la consommation des comptes Surfeo/App liés au revendeur
+  try {
+    const appAccounts = db.prepare('SELECT username FROM app_accounts WHERE reseller_id = ?').all(reseller.id);
+    for (const a of appAccounts) {
+      if (a.username) {
+        const bytes = system.readSshUsageBytes(a.username);
+        if (bytes > 0) consumedActiveGb += bytes / Math.pow(1024, 3);
+      }
+    }
+  } catch {}
+
+  // Consommation réelle totale du revendeur (comptage réel)
+  const consumedTotalGb = Math.max(0, consumedActiveGb + (reseller.consumed_quota_gb || 0) - (reseller.quota_reset_offset_gb || 0));
+
+  // Quota réel restant
+  const remainingRealGb = reseller.data_quota_gb != null 
+    ? Math.max(0, reseller.data_quota_gb - consumedTotalGb) 
+    : null;
+
   return {
     activeClientCount: active.length,
     onlineClientCount: onlineTotal,
@@ -57,27 +72,15 @@ function getResellerStats(reseller) {
     expiredClientCount: expiredCount,
     allocatedQuotaGb: allocated,
     consumedByDeletedGb: reseller.consumed_quota_gb || 0,
-    // "Display reset" only ever moves quota_reset_offset_gb - it never touches consumed_quota_gb
-    // (the historical banked total from deleted/reset clients) or any client's own live usage.
-    // Subtracting it here is what makes an admin reset show 0 immediately while clients keep
-    // their own counters untouched, with future consumption growing the total again from 0.
-    consumedTotalGb: Math.max(0, consumedActiveGb + (reseller.consumed_quota_gb || 0) - (reseller.quota_reset_offset_gb || 0)),
-    // Deliberately NOT offset-adjusted: this is the admission-control ceiling used to decide
-    // whether a reseller can still be handed a new client quota, and must stay tied to real
-    // commitments (allocated quotas + banked usage) - a display reset must never free up
-    // room to over-allocate beyond the reseller's actual data_quota_gb.
-    totalCommittedGb: totalCommitted,
+    consumedTotalGb: consumedTotalGb,
+    remainingRealGb: remainingRealGb,
+    totalCommittedGb: consumedTotalGb, // Aligné sur la consommation réelle
     allocatedConnections: allocatedConnections,
     clients: clientsWithLive
   };
 }
 
-// Throws with a human-readable French message if the reseller cannot create/grant this
-// many SSH connection slots. `max_users` is the reseller's total allowed simultaneous
-// online-connections ceiling (the SUM of every SSH client's own "max simultaneous
-// connections" must stay within it) - not just a count of client accounts.
-// `excludeClientId` lets an edit re-check the sum without counting the client's own
-// pre-edit row twice.
+// Vérifie que la somme des connexions simultanées ne dépasse pas max_users
 function assertConnectionsWithinLimit(reseller, maxConnections, excludeClientId) {
   const already = getAllocatedConnectionsSum(reseller.id, excludeClientId);
   const projected = already + (maxConnections || 0);
@@ -89,7 +92,7 @@ function assertConnectionsWithinLimit(reseller, maxConnections, excludeClientId)
   }
 }
 
-// Throws with a human-readable French message if the reseller cannot create this client.
+// Vérifie si le revendeur a le droit de créer ce client selon son quota réel
 function assertCanCreateClient(reseller, { quotaGb, protocols, maxConnections, type }) {
   if (reseller.status !== 'active') {
     throw new Error('Votre compte reseller est verrouillé, vous ne pouvez pas créer de nouveaux comptes.');
@@ -111,19 +114,28 @@ function assertCanCreateClient(reseller, { quotaGb, protocols, maxConnections, t
     assertConnectionsWithinLimit(reseller, maxConnections);
   }
 
+  // Si le revendeur a un quota illimité, aucune restriction de quota
   if (reseller.data_quota_gb == null) {
-    return; // reseller has unlimited quota, no further check needed
+    return;
   }
 
-  if (quotaGb == null) {
-    throw new Error('Votre compte a un quota de data limité : vous devez fixer un quota précis pour ce client (pas "illimité").');
+  // Comptage réel : vérification de l'enveloppe globale restante
+  const remainingReal = stats.remainingRealGb != null ? stats.remainingRealGb : Math.max(0, reseller.data_quota_gb - stats.consumedTotalGb);
+  if (remainingReal <= 0) {
+    throw new Error(`Quota insuffisant : votre enveloppe totale de données (${reseller.data_quota_gb} Go) est entièrement consommée (0 octets restants).`);
   }
 
-  const projected = stats.totalCommittedGb + quotaGb;
-  if (projected > reseller.data_quota_gb) {
-    const remaining = Math.max(0, reseller.data_quota_gb - stats.totalCommittedGb);
-    throw new Error(`Quota insuffisant : il ne vous reste que ${format.formatDataSize(remaining, 'fr')} disponibles sur votre quota total.`);
+  // Si un quota spécifique est demandé pour ce client, vérifier qu'il ne dépasse pas le restant réel
+  if (quotaGb != null && quotaGb > 0 && quotaGb > remainingReal) {
+    throw new Error(`Quota insuffisant : le quota demandé (${quotaGb} Go) dépasse votre quota restant disponible (${format.formatDataSize(remainingReal, 'fr')}).`);
   }
 }
 
-module.exports = { getActiveClients, getAllocatedQuotaSum, getAllocatedConnectionsSum, getResellerStats, assertCanCreateClient, assertConnectionsWithinLimit };
+module.exports = {
+  getActiveClients,
+  getAllocatedQuotaSum,
+  getAllocatedConnectionsSum,
+  getResellerStats,
+  assertCanCreateClient,
+  assertConnectionsWithinLimit
+};

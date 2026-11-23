@@ -55,10 +55,22 @@
         </div>
         <div class="stat-value">
           <%= fmtData(stats.consumedTotalGb) %>
+          <span class="dim" style="font-size:16px;">/ <%= reseller.data_quota_gb != null ? fmtData(reseller.data_quota_gb) : t('common.unlimited') %></span>
         </div>
-        <% if (reseller.data_quota_gb != null) { %>
-          <div class="quota-bar-track" style="margin-top:6px;">
-            <div class="quota-bar-fill" style="width: <%= Math.min(100, (stats.consumedTotalGb / reseller.data_quota_gb) * 100) %>%;"></div>
+        <% if (reseller.data_quota_gb != null) { 
+             const usedPct = Math.min(100, Math.round((stats.consumedTotalGb / reseller.data_quota_gb) * 100));
+             const barLevel = usedPct >= 90 ? 'quota-bar-danger' : (usedPct >= 75 ? 'quota-bar-warning' : '');
+             const remainingGb = Math.max(0, reseller.data_quota_gb - stats.consumedTotalGb);
+        %>
+          <div class="quota-bar-row" style="margin-top:6px;">
+            <div class="quota-bar-track">
+              <div class="quota-bar-fill <%= barLevel %>" style="width: <%= usedPct %>%;"></div>
+            </div>
+            <span class="quota-bar-pct <%= barLevel %>"><%= usedPct %>%</span>
+          </div>
+          <div class="quota-text" style="margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
+            <div><span class="quota-text-label">Restant :</span> <span class="quota-text-value" style="font-weight:600;"><%= fmtData(remainingGb) %></span></div>
+            <div><span class="quota-text-label">Total :</span> <span class="quota-text-value"><%= fmtData(reseller.data_quota_gb) %></span></div>
           </div>
         <% } %>
       </div>

@@ -1,6 +1,7 @@
 const db = require('../db/database');
 const clientsLib = require('../lib/clients');
 const audit = require('../lib/audit');
+const quota = require('../lib/quota');
 
 const SYSTEM_ACTOR = { type: 'system', name: 'système (expiration)' };
 const QUOTA_ACTOR = { type: 'system', name: 'système (quota)' };
@@ -12,15 +13,30 @@ function today() {
 function runEnforcement() {
   const t = today();
 
-  // --- 1. Reseller-level expiry cascade ---
+  // --- 1. Reseller-level expiry and real quota cascade ---
   const resellers = db.prepare('SELECT * FROM resellers').all();
   for (const reseller of resellers) {
     const isExpired = reseller.expiry_date && reseller.expiry_date < t;
+    let isQuotaExhausted = false;
+    let stats = null;
 
-    if (isExpired && reseller.status === 'active') {
+    if (reseller.data_quota_gb != null) {
+      try {
+        stats = quota.getResellerStats(reseller);
+        isQuotaExhausted = stats.consumedTotalGb >= reseller.data_quota_gb;
+      } catch {}
+    }
+
+    const shouldLock = isExpired || isQuotaExhausted;
+
+    if (shouldLock && reseller.status === 'active') {
+      const reason = isExpired 
+        ? `compte expiré le ${reseller.expiry_date}` 
+        : `quota de données atteint (${stats.consumedTotalGb.toFixed(2)} / ${reseller.data_quota_gb} Go)`;
+
       db.prepare(`UPDATE resellers SET status = 'locked_expired' WHERE id = ?`).run(reseller.id);
-      audit.log('system', 'système (expiration)', 'reseller_lock_expired',
-        `Reseller "${reseller.username}" verrouillé automatiquement (compte expiré le ${reseller.expiry_date})`, reseller.id);
+      audit.log('system', 'système (enforcement)', 'reseller_lock_expired',
+        `Reseller "${reseller.username}" verrouillé automatiquement (${reason})`, reseller.id);
 
       const active = db.prepare(`SELECT * FROM clients WHERE reseller_id = ? AND deleted = 0 AND status = 'active'`).all(reseller.id);
       for (const c of active) {
@@ -31,10 +47,10 @@ function runEnforcement() {
       }
     }
 
-    if (!isExpired && reseller.status === 'locked_expired') {
+    if (!shouldLock && reseller.status === 'locked_expired') {
       db.prepare(`UPDATE resellers SET status = 'active' WHERE id = ?`).run(reseller.id);
       audit.log('system', 'système (renouvellement)', 'reseller_unlock',
-        `Reseller "${reseller.username}" réactivé automatiquement (validité prolongée)`, reseller.id);
+        `Reseller "${reseller.username}" réactivé automatiquement (quota ou validité renouvelé)`, reseller.id);
 
       const locked = db.prepare(`SELECT * FROM clients WHERE reseller_id = ? AND deleted = 0 AND status = 'locked_reseller'`).all(reseller.id);
       for (const c of locked) {

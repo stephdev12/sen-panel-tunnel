@@ -277,9 +277,19 @@ router.post('/resellers/:id/reset-quota', (req, res) => {
     const statsBefore = quota.getResellerStats(reseller);
     const rawTotalGb = statsBefore.consumedTotalGb + (reseller.quota_reset_offset_gb || 0);
     db.prepare('UPDATE resellers SET quota_reset_offset_gb = ? WHERE id = ?').run(rawTotalGb, id);
+
+    // Si le revendeur était bloqué pour dépassement de quota et n'a pas dépassé sa date d'expiration, le réactiver
+    if (reseller.status === 'locked_expired') {
+      const today = new Date().toISOString().slice(0, 10);
+      const isDateExpired = reseller.expiry_date && reseller.expiry_date < today;
+      if (!isDateExpired) {
+        db.prepare("UPDATE resellers SET status = 'active' WHERE id = ?").run(id);
+      }
+    }
+
     audit.log('admin', req.session.username, 'reseller_reset_quota',
-      `Quota consommé total remis à zéro (affichage) pour "${reseller.username}" — clients non affectés`, id);
-    res.redirect(`/admin/resellers/${id}?success=` + encodeURIComponent('Quota consommé du reseller réinitialisé.'));
+      `Quota consommé remis à zéro pour "${reseller.username}" (consommation précédente : ${statsBefore.consumedTotalGb.toFixed(2)} Go)`, id);
+    res.redirect(`/admin/resellers/${id}?success=` + encodeURIComponent('Quota de consommation du revendeur réinitialisé avec succès.'));
   } catch (e) {
     res.redirect(`/admin/resellers/${id}?error=` + encodeURIComponent(e.message));
   }

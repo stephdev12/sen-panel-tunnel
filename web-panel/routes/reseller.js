@@ -203,9 +203,16 @@ router.post('/surfeo/create', (req, res) => {
       throw new Error(`Limite atteinte : votre allocation est de ${maxSurfeo} compte(s) Surfeo maximum.`);
     }
 
+    const stats = quota.getResellerStats(reseller);
     const requestedQuota = parseFloat(quota_gb) || 0;
-    if (reseller.surfeo_quota_gb != null && requestedQuota > reseller.surfeo_quota_gb) {
-      throw new Error(`Le quota demandé (${requestedQuota} Go) dépasse votre quota alloué (${reseller.surfeo_quota_gb} Go).`);
+    const remainingReal = stats.remainingRealGb != null ? stats.remainingRealGb : (reseller.data_quota_gb != null ? Math.max(0, reseller.data_quota_gb - stats.consumedTotalGb) : null);
+
+    if (reseller.surfeo_quota_gb != null) {
+      if (requestedQuota > reseller.surfeo_quota_gb) {
+        throw new Error(`Le quota demandé (${requestedQuota} Go) dépasse votre quota Surfeo alloué (${reseller.surfeo_quota_gb} Go).`);
+      }
+    } else if (remainingReal != null && requestedQuota > 0 && requestedQuota > remainingReal) {
+      throw new Error(`Quota insuffisant : le quota demandé (${requestedQuota} Go) dépasse votre quota restant disponible (${format.formatDataSize(remainingReal, 'fr')}).`);
     }
 
     let formattedDeviceId = '';
