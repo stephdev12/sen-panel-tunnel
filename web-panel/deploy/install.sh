@@ -242,6 +242,9 @@ fi
 echo "📦 Installing Node dependencies..."
 npm install --omit=dev
 
+echo "👤 Setting up admin account ($ADMIN_USER)..."
+node "$PROJECT_DIR/deploy/admin-tool.js" upsert "$ADMIN_USER" "$ADMIN_PASS"
+
 
 echo "⚙️  Configuring systemd..."
 sed -e "s|__PROJECT_DIR__|$PROJECT_DIR|g" \
@@ -294,7 +297,7 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
 fi
 if command -v iptables >/dev/null 2>&1; then
   iptables -C INPUT -p tcp --dport "$PUBLIC_PORT" -j ACCEPT 2>/dev/null || \
-  iptables -I INPUT -p tcp --dport "$PUBLIC_PORT" -j ACCEPT 2>/dev/null || true
+  iptables -I INPUT 1 -p tcp --dport "$PUBLIC_PORT" -j ACCEPT 2>/dev/null || true
   echo "   [OK] Port $PUBLIC_PORT/tcp allowed in iptables"
 fi
 

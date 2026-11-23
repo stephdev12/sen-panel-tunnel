@@ -10,11 +10,10 @@
 //   node admin-tool.js create <username> <password>   (only if no admin exists yet)
 
 const path = require('path');
-const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 
-const config = require(path.join(__dirname, '..', 'config'));
-const db = new Database(config.PANEL_DB_FILE);
+// Charge la base de données via le module officiel pour garantir la création des tables et migrations
+const db = require(path.join(__dirname, '..', 'db', 'database'));
 
 const [, , cmd, a, b] = process.argv;
 
@@ -63,7 +62,22 @@ switch (cmd) {
     break;
   }
 
+  case 'upsert': {
+    if (!a || !b) fail('usage: upsert <username> <password>');
+    if (b.length < 6) fail('Le mot de passe doit contenir au moins 6 caractères.');
+    const hash = bcrypt.hashSync(b, 10);
+    const firstAdmin = db.prepare('SELECT * FROM admins ORDER BY id ASC LIMIT 1').get();
+    if (firstAdmin) {
+      db.prepare('UPDATE admins SET username = ?, password_hash = ? WHERE id = ?').run(a, hash, firstAdmin.id);
+      console.log(`OK: compte administrateur #${firstAdmin.id} mis à jour avec succès (${a}).`);
+    } else {
+      db.prepare('INSERT INTO admins (username, password_hash) VALUES (?, ?)').run(a, hash);
+      console.log(`OK: compte administrateur "${a}" créé avec succès.`);
+    }
+    break;
+  }
+
   default:
-    console.log('Commandes: list | set-username <old> <new> | set-password <user> <pass> | create <user> <pass>');
+    console.log('Commandes: list | set-username <old> <new> | set-password <user> <pass> | create <user> <pass> | upsert <user> <pass>');
     process.exit(cmd ? 1 : 0);
 }

@@ -9,8 +9,15 @@ set -Eeuo pipefail
 
 # ================= CONFIGURATION =================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="/opt/nova-x-tunnel/web-panel"
-[[ ! -d "$APP_DIR" && -d "/opt/senpanel/web-panel" ]] && APP_DIR="/opt/senpanel/web-panel"
+if [[ -d "/opt/nova-x-tunnel/web-panel" ]]; then
+  APP_DIR="/opt/nova-x-tunnel/web-panel"
+elif [[ -d "/opt/senpanel/web-panel" ]]; then
+  APP_DIR="/opt/senpanel/web-panel"
+elif [[ -f "$SCRIPT_DIR/package.json" && -f "$SCRIPT_DIR/server.js" ]]; then
+  APP_DIR="$SCRIPT_DIR"
+fi
 
 APP_ENTRY="server.js"
 APP_PORT="3000"         # Port interne Node.js (reverse proxy)
@@ -23,6 +30,7 @@ GREEN=$'\033[0;32m'
 RED=$'\033[0;31m'
 YELLOW=$'\033[1;33m'
 CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
 NC=$'\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -66,6 +74,31 @@ else
   read_tty -rp "👉 Email pour le certificat Let's Encrypt : " EMAIL
 fi
 
+# Configuration des identifiants Administrateur
+read_tty -rp "👉 Nom d'utilisateur administrateur [admin] : " ADMIN_USER
+ADMIN_USER="${ADMIN_USER:-admin}"
+
+while true; do
+  read_tty -rsp "👉 Mot de passe administrateur (laisser vide pour générer aléatoirement) : " ADMIN_PASS
+  echo
+  if [[ -z "$ADMIN_PASS" ]]; then
+    ADMIN_PASS=$(openssl rand -base64 12 | tr -d '=+/')
+    info "Mot de passe généré automatiquement : $ADMIN_PASS"
+    break
+  fi
+  if [[ ${#ADMIN_PASS} -lt 6 ]]; then
+    warn "Le mot de passe doit comporter au moins 6 caractères."
+    continue
+  fi
+  read_tty -rsp "👉 Confirmez le mot de passe : " ADMIN_PASS_CONFIRM
+  echo
+  if [[ "$ADMIN_PASS" != "$ADMIN_PASS_CONFIRM" ]]; then
+    warn "Les mots de passe ne correspondent pas. Réessayez."
+    continue
+  fi
+  break
+done
+
 # ================= BACKUP =================
 
 BACKUP_DIR="/root/senpanel-backup-$(date +%Y%m%d-%H%M%S)"
@@ -74,6 +107,7 @@ mkdir -p "$BACKUP_DIR"
 for FILE in \
     "/etc/nginx/sites-available/$NGINX_SITE" \
     "/etc/nginx/sites-available/nova-panel" \
+    "/etc/nginx/sites-available/novaxpanel" \
     "/etc/systemd/system/$SERVICE_NAME.service" \
     "$APP_DIR/.env" \
     "$APP_DIR/db/panel.sqlite3"
@@ -120,6 +154,7 @@ info "npm version     : $(npm --version)"
 
 info "Configuration de l'application Node.js..."
 cd "$APP_DIR"
+mkdir -p "$APP_DIR/db"
 
 if [ ! -f .env ]; then
     if [ -f .env.example ]; then
@@ -131,15 +166,20 @@ if [ ! -f .env ]; then
     echo "SESSION_SECRET=${SESSION_SECRET}" >> .env
 fi
 
-# Configuration des variables d'environnement pour le port 2045
+# Configuration des variables d'environnement
 sed -i '/^PORT=/d' .env && echo "PORT=${APP_PORT}" >> .env
 sed -i '/^PUBLIC_PORT=/d' .env && echo "PUBLIC_PORT=${PANEL_PORT}" >> .env
 sed -i '/^DOMAIN=/d' .env && echo "DOMAIN=${DOMAIN}" >> .env
 sed -i '/^BEHIND_TLS_PROXY=/d' .env && echo "BEHIND_TLS_PROXY=true" >> .env
 sed -i '/^TLS_MODE=/d' .env && echo "TLS_MODE=nginx" >> .env
+sed -i '/^DEFAULT_ADMIN_USER=/d' .env && echo "DEFAULT_ADMIN_USER=${ADMIN_USER}" >> .env
+sed -i '/^DEFAULT_ADMIN_PASS=/d' .env && echo "DEFAULT_ADMIN_PASS=${ADMIN_PASS}" >> .env
 
 info "Installation des dépendances npm..."
 npm install --omit=dev --silent 2>/dev/null || npm install --omit=dev
+
+info "Configuration du compte administrateur ($ADMIN_USER)..."
+node "$APP_DIR/deploy/admin-tool.js" upsert "$ADMIN_USER" "$ADMIN_PASS"
 
 # ================= SYSTEMD =================
 
@@ -153,6 +193,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${APP_DIR}
+EnvironmentFile=-${APP_DIR}/.env
 ExecStart=$(command -v node) ${APP_DIR}/${APP_ENTRY}
 Restart=always
 RestartSec=5
@@ -167,6 +208,13 @@ EOF
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
+
+# Installer la commande CLI novaxpanel
+if [[ -f "$APP_DIR/deploy/novaxpanel-cli.sh" ]]; then
+    info "Installation de la commande CLI 'novaxpanel'..."
+    sed -e "s|__PROJECT_DIR__|$APP_DIR|g" "$APP_DIR/deploy/novaxpanel-cli.sh" > /usr/local/bin/novaxpanel
+    chmod +x /usr/local/bin/novaxpanel
+fi
 
 sleep 2
 
@@ -215,6 +263,7 @@ if [[ -z "$SSL_CERT" || ! -f "$SSL_CERT" ]]; then
     info "Génération d'un certificat SSL auto-signé dédié pour le port ${PANEL_PORT}..."
     SSL_DIR="/etc/ssl/senpanel"
     mkdir -p "$SSL_DIR"
+    chmod 755 "$SSL_DIR"
     SSL_CERT="$SSL_DIR/cert.pem"
     SSL_KEY="$SSL_DIR/key.pem"
     
@@ -222,33 +271,41 @@ if [[ -z "$SSL_CERT" || ! -f "$SSL_CERT" ]]; then
         -keyout "$SSL_KEY" \
         -out "$SSL_CERT" \
         -subj "/C=FR/ST=Global/L=Cloud/O=SenPanel/CN=${DOMAIN}" 2>/dev/null
-    chmod 600 "$SSL_KEY"
+    chmod 644 "$SSL_KEY"
+    chmod 644 "$SSL_CERT"
 fi
 
 # ================= NGINX SUR LE PORT 2045 =================
 
 info "Configuration de Nginx sur le port ${PANEL_PORT}..."
 
-# Désactiver le site par défaut de Nginx qui squatte le port 80 si présent
-if [[ -L "/etc/nginx/sites-enabled/default" ]]; then
-    rm -f "/etc/nginx/sites-enabled/default"
-fi
+# Désactiver les sites par défaut et anciens liens
+rm -f "/etc/nginx/sites-enabled/default" 2>/dev/null || true
+rm -f "/etc/nginx/sites-enabled/nova-panel" 2>/dev/null || true
+rm -f "/etc/nginx/sites-enabled/novaxpanel" 2>/dev/null || true
+rm -f "/etc/nginx/conf.d/default.conf" 2>/dev/null || true
 
 NGINX_AVAILABLE="/etc/nginx/sites-available/${NGINX_SITE}"
 NGINX_ENABLED="/etc/nginx/sites-enabled/${NGINX_SITE}"
 
 cat > "$NGINX_AVAILABLE" <<EOF
 server {
-    listen ${PANEL_PORT} ssl;
-    listen [::]:${PANEL_PORT} ssl;
+    listen ${PANEL_PORT} ssl default_server;
+    listen [::]:${PANEL_PORT} ssl default_server;
 
-    server_name ${DOMAIN};
+    server_name ${DOMAIN} _ localhost "";
 
     ssl_certificate     ${SSL_CERT};
     ssl_certificate_key ${SSL_KEY};
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers off;
+
+    # Redirection automatique en HTTPS si requête HTTP ordinaire reçue sur le port SSL
+    error_page 497 https://\$http_host\$request_uri;
+
+    client_max_body_size 20M;
 
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};
@@ -257,7 +314,7 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Proto https;
 
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -269,20 +326,19 @@ server {
 EOF
 
 ln -sfn "$NGINX_AVAILABLE" "$NGINX_ENABLED"
-# Nettoyer l'ancien lien nova-panel s'il existe
-rm -f "/etc/nginx/sites-enabled/nova-panel" 2>/dev/null || true
 
 nginx -t || error "Erreur dans la configuration Nginx générée."
 
 systemctl enable nginx
 systemctl restart nginx
+systemctl restart "$SERVICE_NAME"
 
 # ================= OUVERTURE DU PORT PARE-FEU =================
 
 info "Ouverture automatique du port ${PANEL_PORT} dans le pare-feu..."
 
 if command -v ufw >/dev/null 2>&1; then
-    if ufw status | grep -q "Status: active"; then
+    if ufw status 2>/dev/null | grep -q "Status: active"; then
         ufw allow "${PANEL_PORT}/tcp" >/dev/null 2>&1 || true
         ufw allow 80/tcp >/dev/null 2>&1 || true
         ufw allow 443/tcp >/dev/null 2>&1 || true
@@ -294,13 +350,35 @@ fi
 
 if command -v iptables >/dev/null 2>&1; then
     iptables -C INPUT -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -I INPUT 1 -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || true
     info "[OK] Port ${PANEL_PORT}/tcp autorisé dans iptables."
+fi
+
+if command -v ip6tables >/dev/null 2>&1; then
+    ip6tables -C INPUT -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || \
+    ip6tables -I INPUT 1 -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || true
+fi
+
+if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+    firewall-cmd --permanent --add-port="${PANEL_PORT}/tcp" >/dev/null 2>&1 || true
+    firewall-cmd --reload >/dev/null 2>&1 || true
+    info "[OK] Port ${PANEL_PORT}/tcp autorisé dans firewalld."
 fi
 
 # Relancer HAProxy s'il est configuré pour s'assurer qu'il a les ports 80/443
 if systemctl list-unit-files 2>/dev/null | grep -q '^haproxy'; then
     systemctl restart haproxy 2>/dev/null || true
+fi
+
+# ================= VERIFICATION DE FONCTIONNEMENT =================
+
+info "Vérification locale de l'accessibilité du panel..."
+sleep 2
+
+if curl -k -fsS "https://127.0.0.1:${PANEL_PORT}/login" >/dev/null 2>&1 || curl -k -s "https://127.0.0.1:${PANEL_PORT}/" | grep -qi "login\|html"; then
+    info "[OK] Le panel répond correctement sur https://127.0.0.1:${PANEL_PORT}"
+else
+    warn "Le test local immédiat n'a pas répondu. Vérifiez avec 'systemctl status $SERVICE_NAME' et 'systemctl status nginx'."
 fi
 
 # ================= RESUME FINAL =================
@@ -309,11 +387,20 @@ echo
 echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}       INSTALLATION DU PANEL REUSSIE      ${NC}"
 echo -e "${GREEN}==========================================${NC}"
-echo -e " URL du Panel   : ${CYAN}https://${DOMAIN}:${PANEL_PORT}${NC}"
-echo -e " Port Web Nginx : ${CYAN}${PANEL_PORT}${NC} (ports 80 & 443 libres pour les tunnels)"
-echo -e " Port Node.js   : ${APP_PORT} (interne)"
-echo -e " Service        : ${SERVICE_NAME} (systemctl status ${SERVICE_NAME})"
-echo -e " Sauvegarde     : ${BACKUP_DIR}"
+echo -e " URL du Panel      : ${CYAN}https://${DOMAIN}:${PANEL_PORT}${NC}"
+echo -e " Nom d'utilisateur : ${CYAN}${ADMIN_USER}${NC}"
+echo -e " Mot de passe      : ${CYAN}${ADMIN_PASS}${NC}"
+echo -e " Port Web Nginx    : ${CYAN}${PANEL_PORT}${NC} (ports 80 & 443 libres pour les tunnels)"
+echo -e " Port Node.js      : ${APP_PORT} (interne)"
+echo -e " Service           : ${SERVICE_NAME} (systemctl status ${SERVICE_NAME})"
+echo -e " Sauvegarde        : ${BACKUP_DIR}"
 echo
-echo -e " Pour gérer le panel, tapez : ${CYAN}novaxpanel${NC} ou connectez-vous sur ${CYAN}https://${DOMAIN}:${PANEL_PORT}${NC}"
+if [[ -z "$EMAIL" || "$DOMAIN" == "$PUBLIC_IP" ]]; then
+echo -e "${YELLOW}⚠️  NOTE IMPORTANTE CONNEXION :${NC}"
+echo -e " Le panel utilise un certificat SSL direct sur IP/domaine."
+echo -e " Votre navigateur affichera un avertissement : ${YELLOW}'Votre connexion n'est pas privée'${NC}."
+echo -e " 👉 Cliquez sur ${BOLD}'Paramètres avancés'${NC} puis sur ${BOLD}'Continuer vers le site'${NC}."
+echo
+fi
+echo -e " Pour gérer le panel en console à tout moment : tapez ${CYAN}novaxpanel${NC}"
 echo -e "${GREEN}==========================================${NC}"

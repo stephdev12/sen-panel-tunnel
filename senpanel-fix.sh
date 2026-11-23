@@ -312,6 +312,12 @@ else
     ok "ufw inactif, rien à faire"
 fi
 
+if command -v iptables &>/dev/null; then
+    iptables -C INPUT -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 1 -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || true
+    ok "iptables : port ${PANEL_PORT} autorisé"
+fi
+
 # -----------------------------------------------------------------------------
 # 7. Test final
 # -----------------------------------------------------------------------------
