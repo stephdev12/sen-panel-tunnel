@@ -21,25 +21,39 @@ if [ -z "$INSTALL_DIR" ]; then
 fi
 
 echo "=========================================================="
-echo " [1/4] Mise à jour du code dans $INSTALL_DIR..."
+echo " [1/5] Sauvegarde de sécurité des données..."
+echo "=========================================================="
+BACKUP_DIR="/root/senpanel_backup_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+if [ -f "$INSTALL_DIR/web-panel/db/panel.sqlite3" ]; then
+  cp -p "$INSTALL_DIR/web-panel/db/panel.sqlite3" "$BACKUP_DIR/"
+  echo "[OK] Base SQLite sauvegardée dans $BACKUP_DIR/panel.sqlite3"
+fi
+if [ -f "$INSTALL_DIR/web-panel/.env" ]; then
+  cp -p "$INSTALL_DIR/web-panel/.env" "$BACKUP_DIR/"
+  echo "[OK] Fichier .env sauvegardé dans $BACKUP_DIR/.env"
+fi
+
+echo "=========================================================="
+echo " [2/5] Mise à jour du code dans $INSTALL_DIR..."
 echo "=========================================================="
 cd "$INSTALL_DIR"
 git fetch origin main || git fetch origin master
 git reset --hard origin/main 2>/dev/null || git reset --hard origin/master
 
 echo "=========================================================="
-echo " [2/4] Vérification des dépendances..."
+echo " [3/5] Vérification des dépendances..."
 echo "=========================================================="
 cd "$INSTALL_DIR/web-panel"
 npm install --omit=dev --silent 2>/dev/null || true
 
 echo "=========================================================="
-echo " [3/4] Synchronisation des mots de passe SSH..."
+echo " [4/5] Synchronisation des mots de passe SSH..."
 echo "=========================================================="
 node deploy/sync-app-passwords.js
 
 echo "=========================================================="
-echo " [4/4] Redémarrage du service panel..."
+echo " [5/5] Redémarrage du service panel..."
 echo "=========================================================="
 if systemctl is-active --quiet novaxpanel; then
   systemctl restart novaxpanel
