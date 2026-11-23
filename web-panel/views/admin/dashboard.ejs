@@ -1,117 +1,143 @@
-<%- include('../partials/head', { title: 'Resellers — NOVA XTUNNEL' }) %>
+<%- include('../partials/head', { title: 'Resellers — SEN PANEL TUNNEL' }) %>
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title"><%= t('dash.admin.title') %></h1>
         <p class="page-sub"><%= t('dash.admin.subtitle') %></p>
       </div>
-      <div class="user-chip"><div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div><span><%= t('common.connected_as') %> <b><%= username %></b></span></div>
+      <div class="user-chip">
+        <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
+        <span><%= t('common.connected_as') %> <b><%= username %></b></span>
+      </div>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
+    <!-- 3X-UI Minimal Stat Grid -->
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-label"><%= t('dash.admin.stat.resellers') %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('dash.admin.stat.resellers') %></span>
+          <i data-lucide="users" class="stat-icon"></i>
+        </div>
         <div class="stat-value"><%= resellers.length %></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><%= t('dash.admin.stat.active') %></div>
-        <div class="stat-value" style="color: var(--success);"><%= resellers.filter(r => r.status === 'active').length %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('dash.admin.stat.active') %></span>
+          <i data-lucide="shield-check" class="stat-icon" style="color:var(--success);"></i>
+        </div>
+        <div class="stat-value success"><%= resellers.filter(r => r.status === 'active').length %></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><%= t('dash.admin.stat.locked') %></div>
-        <div class="stat-value" style="color: var(--warning);"><%= resellers.filter(r => r.status !== 'active').length %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('dash.admin.stat.locked') %></span>
+          <i data-lucide="alert-triangle" class="stat-icon" style="color:var(--warning);"></i>
+        </div>
+        <div class="stat-value warning"><%= resellers.filter(r => r.status !== 'active').length %></div>
       </div>
       <div class="stat-card">
-        <div class="stat-label"><%= t('dash.admin.stat.online_total') %></div>
-        <div class="stat-value accent"><%= resellers.reduce((a, r) => a + r.stats.onlineClientCount, 0) %> / <%= resellers.reduce((a, r) => a + r.max_users, 0) %></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><%= t('dash.admin.stat.quota_total') %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('dash.admin.stat.online_total') %></span>
+          <i data-lucide="activity" class="stat-icon" style="color:var(--accent);"></i>
+        </div>
         <div class="stat-value accent">
+          <%= resellers.reduce((a, r) => a + r.stats.onlineClientCount, 0) %> <span class="dim" style="font-size:16px;">/ <%= resellers.reduce((a, r) => a + r.max_users, 0) %></span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label"><%= t('dash.admin.stat.quota_total') %></span>
+          <i data-lucide="database" class="stat-icon"></i>
+        </div>
+        <div class="stat-value">
           <%
             const totalConsumed = resellers.reduce((a, r) => a + r.stats.consumedTotalGb, 0);
             const hasUnlimited = resellers.some((r) => r.data_quota_gb == null);
             const totalQuota = resellers.reduce((a, r) => a + (r.data_quota_gb || 0), 0);
           %>
-          <%= fmtData(totalConsumed) %> / <%= hasUnlimited ? '∞' : fmtData(totalQuota) %>
+          <%= fmtData(totalConsumed) %> <span class="dim" style="font-size:15px;">/ <%= hasUnlimited ? '∞' : fmtData(totalQuota) %></span>
         </div>
       </div>
     </div>
 
+    <!-- Resellers Table -->
     <div class="panel">
-      <div class="panel-head"><h2><%= t('dash.admin.all_resellers') %></h2></div>
+      <div class="panel-head">
+        <h2><i data-lucide="users"></i> <%= t('dash.admin.all_resellers') %></h2>
+      </div>
       <% if (resellers.length === 0) { %>
-        <div class="empty-state"><%= t('dash.admin.empty_resellers') %></div>
+        <div class="empty-state">
+          <i data-lucide="users" style="width:36px; height:36px; opacity:0.3; margin-bottom:8px;"></i>
+          <div><%= t('dash.admin.empty_resellers') %></div>
+        </div>
       <% } else { %>
       <div class="table-scroll">
-  <table>
-        <thead>
-          <tr>
-            <th><%= t('dash.admin.th.reseller') %></th>
-            <th><%= t('dash.admin.th.status') %></th>
-            <th><%= t('dash.admin.th.online') %></th>
-            <th><%= t('dash.admin.th.quota') %></th>
-            <th>Alloué Surfeo</th>
-            <th><%= t('dash.admin.th.locked_expired') %></th>
-            <th><%= t('dash.admin.th.expiry') %></th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <% resellers.forEach(r => { %>
-          <tr>
-            <td><a href="/admin/resellers/<%= r.id %>"><b><%= r.username %></b></a></td>
-            <td><span class="pill <%= r.status %>"><%= r.status === 'active' ? t('common.status.active') : (r.status === 'locked_manual' ? t('common.status.locked_manual') : t('common.status.locked_expired')) %></span></td>
-            <td class="mono"><%= r.stats.onlineClientCount %> / <%= r.max_users %></td>
-            <td class="mono">
-              <% if (r.data_quota_gb == null) { %><%= fmtData(r.stats.consumedTotalGb) %> / <%= t('common.unlimited') %><% } else { %>
-                <%= fmtData(r.stats.consumedTotalGb) %> / <%= fmtData(r.data_quota_gb) %>
-              <% } %>
-            </td>
-            <td class="mono" style="font-size:12px;">
-              <span style="color:var(--accent); font-weight:600;"><%= r.max_surfeo_users || 0 %> cptes</span>
-              <span style="color:var(--muted);">(<%= r.surfeo_quota_gb ? r.surfeo_quota_gb + ' Go' : 'Illimité' %>)</span>
-            </td>
-            <td class="mono"><%= r.stats.lockedClientCount %> / <%= r.stats.expiredClientCount %></td>
-            <td class="mono"><%= r.expiry_date || t('common.never') %></td>
-            <td><a href="/admin/resellers/<%= r.id %>" class="btn small subtle"><%= t('dash.admin.manage') %></a></td>
-          </tr>
-          <% }) %>
-        </tbody>
-      </table>
-  </div>
+        <table>
+          <thead>
+            <tr>
+              <th><%= t('dash.admin.th.reseller') %></th>
+              <th><%= t('dash.admin.th.status') %></th>
+              <th><%= t('dash.admin.th.online') %></th>
+              <th><%= t('dash.admin.th.quota') %></th>
+              <th>Alloué Surfeo</th>
+              <th><%= t('dash.admin.th.locked_expired') %></th>
+              <th><%= t('dash.admin.th.expiry') %></th>
+              <th style="text-align:right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% resellers.forEach(r => { %>
+            <tr>
+              <td><a href="/admin/resellers/<%= r.id %>" style="font-weight:600;"><%= r.username %></a></td>
+              <td><span class="pill <%= r.status %>"><%= r.status === 'active' ? t('common.status.active') : (r.status === 'locked_manual' ? t('common.status.locked_manual') : t('common.status.locked_expired')) %></span></td>
+              <td class="mono"><%= r.stats.onlineClientCount %> / <%= r.max_users %></td>
+              <td class="mono">
+                <% if (r.data_quota_gb == null) { %><%= fmtData(r.stats.consumedTotalGb) %> / <%= t('common.unlimited') %><% } else { %>
+                  <%= fmtData(r.stats.consumedTotalGb) %> / <%= fmtData(r.data_quota_gb) %>
+                <% } %>
+              </td>
+              <td>
+                <span class="mono" style="font-weight:600; color:var(--accent);"><%= r.max_surfeo_users || 0 %> cptes</span>
+                <span class="dim">(<%= r.surfeo_quota_gb ? r.surfeo_quota_gb + ' Go' : 'Illimité' %>)</span>
+              </td>
+              <td class="mono dim"><%= r.stats.lockedClientCount %> / <%= r.stats.expiredClientCount %></td>
+              <td class="mono dim"><%= r.expiry_date || t('common.never') %></td>
+              <td class="actions-cell">
+                <a href="/admin/resellers/<%= r.id %>" class="icon-btn" title="<%= t('dash.admin.manage') %>">
+                  <i data-lucide="chevron-right"></i>
+                </a>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
       <% } %>
     </div>
 
+    <!-- Create Reseller Form -->
     <div class="panel">
-      <div class="panel-head"><h2><%= t('dash.admin.account_title') %></h2></div>
-      <form method="POST" action="/admin/change-password">
-        <label><%= t('common.new_password') %></label>
-        <input type="password" name="new_password" required minlength="6">
-        <button class="btn" type="submit"><%= t('common.change_password') %></button>
-      </form>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h2><%= t('dash.admin.create_reseller_title') %></h2></div>
+      <div class="panel-head">
+        <h2><i data-lucide="user-plus"></i> <%= t('dash.admin.create_reseller_title') %></h2>
+      </div>
       <form method="POST" action="/admin/resellers">
         <div class="grid-2">
           <div>
             <label><%= t('form.username') %></label>
-            <input type="text" name="username" required>
+            <input type="text" name="username" required placeholder="nom d'utilisateur">
           </div>
           <div>
             <label><%= t('form.password') %></label>
-            <input type="password" name="password" required>
+            <input type="password" name="password" required placeholder="mot de passe">
           </div>
         </div>
-        <div class="grid-3">
+
+        <div class="grid-3" style="margin-top:14px;">
           <div>
             <label><%= t('form.max_users') %></label>
             <input type="number" name="max_users" value="10" min="1" required>
@@ -126,34 +152,56 @@
           </div>
         </div>
 
-        <div class="grid-2" style="margin-top:12px; background:rgba(34,211,238,0.06); padding:12px; border-radius:8px; border:1px solid rgba(34,211,238,0.25);">
+        <div class="grid-2" style="margin-top:14px; background:var(--surface-alt); padding:14px; border-radius:var(--radius); border:1px solid var(--border);">
           <div>
-            <label style="color:var(--accent); font-weight:600;">📱 Nombre max de comptes Surfeo alloués</label>
-            <input type="number" name="max_surfeo_users" value="5" min="0" placeholder="ex: 5 (0 = aucun)">
-            <small style="color:var(--muted); font-size:11px;">Nombre de clés/appareils Surfeo que le revendeur peut générer.</small>
+            <label style="color:var(--accent);">Comptes Surfeo alloués (Max)</label>
+            <input type="number" name="max_surfeo_users" value="5" min="0" placeholder="ex: 5">
+            <span class="dim" style="display:block; margin-top:3px;">Nombre de clés Surfeo autorisées</span>
           </div>
           <div>
-            <label style="color:var(--accent); font-weight:600;">📊 Quota de données Surfeo (Go)</label>
-            <input type="number" step="0.1" name="surfeo_quota_gb" placeholder="Laisser vide pour illimité">
-            <small style="color:var(--muted); font-size:11px;">Quota global de données (en Go) alloué aux comptes Surfeo.</small>
+            <label style="color:var(--accent);">Quota Données Surfeo (Go)</label>
+            <input type="number" step="0.1" name="surfeo_quota_gb" placeholder="Vide = Illimité">
+            <span class="dim" style="display:block; margin-top:3px;">Quota global alloué pour Surfeo</span>
           </div>
         </div>
 
-        <label><%= t('form.allowed_protocols') %></label>
-        <div class="checkbox-row">
-          <% protocols.forEach(p => { %>
-            <label class="checkbox-pill"><input type="checkbox" name="protocols" value="<%= p.key %>"> <%= p.label %></label>
-          <% }) %>
+        <div style="margin-top:14px;">
+          <label><%= t('form.allowed_protocols') %></label>
+          <div class="checkbox-row">
+            <% protocols.forEach(p => { %>
+              <label class="checkbox-pill"><input type="checkbox" name="protocols" value="<%= p.key %>"> <%= p.label %></label>
+            <% }) %>
+          </div>
         </div>
 
-        <label><%= t('common.notes') %></label>
-        <textarea name="notes" rows="2"></textarea>
+        <div style="margin-top:14px;">
+          <label><%= t('common.notes') %></label>
+          <textarea name="notes" rows="2"></textarea>
+        </div>
 
-        <button class="btn" type="submit"><%= t('dash.admin.create_reseller_submit') %></button>
+        <div style="margin-top:18px;">
+          <button class="btn" type="submit">
+            <i data-lucide="plus" style="width:14px; height:14px;"></i> <%= t('dash.admin.create_reseller_submit') %>
+          </button>
+        </div>
       </form>
     </div>
 
-  </div>
+    <!-- Password Change Panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2><i data-lucide="lock"></i> <%= t('dash.admin.account_title') %></h2>
+      </div>
+      <form method="POST" action="/admin/change-password">
+        <label><%= t('common.new_password') %></label>
+        <input type="password" name="new_password" required minlength="6" style="max-width:320px;">
+        <div style="margin-top:12px;">
+          <button class="btn" type="submit"><%= t('common.change_password') %></button>
+        </div>
+      </form>
+    </div>
+
+  </main>
 </div>
 </body>
 </html>

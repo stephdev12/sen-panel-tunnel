@@ -132,6 +132,13 @@ function resetClientUsage(clientId, actor) {
   }
 
   system.resetSshUsage(client.identifier);
+  try { system.unlockSshUser(client.identifier); } catch {}
+
+  const today = new Date().toISOString().slice(0, 10);
+  const isDateExpired = client.expiry_date && client.expiry_date < today;
+  if (client.status === 'locked_expired' && !isDateExpired) {
+    db.prepare("UPDATE clients SET status = 'active' WHERE id = ?").run(client.id);
+  }
 
   audit.log(actor.type, actor.name, 'client_reset_usage',
     'Reinitialisation de la consommation du compte SSH "' + client.identifier + '"' +

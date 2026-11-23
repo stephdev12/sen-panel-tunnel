@@ -156,6 +156,29 @@ router.post('/:id/reset-devices', (req, res) => {
   }
 });
 
+// Reset traffic (Remettre le trafic à zéro en 1 clic)
+router.post('/:id/reset-traffic', (req, res) => {
+  const id = req.params.id;
+  try {
+    const account = db.prepare('SELECT * FROM app_accounts WHERE id = ?').get(id);
+    if (!account) throw new Error('Compte introuvable.');
+
+    system.resetSshUsage(account.username);
+    try { system.unlockSshUser(account.username); } catch {}
+
+    const today = new Date().toISOString().slice(0, 10);
+    const isDateExpired = account.expiry_date && account.expiry_date < today;
+    if ((account.state === 'expired' || account.state === 'quota_exceeded') && !isDateExpired) {
+      db.prepare("UPDATE app_accounts SET state = 'active' WHERE id = ?").run(id);
+    }
+
+    audit.log('admin', req.session.username, 'app_account_reset_traffic', `Trafic réinitialisé à zéro pour "${account.username}"`);
+    res.redirect('/admin/app-accounts?success=' + encodeURIComponent(`Trafic remis à zéro avec succès pour ${account.username}.`));
+  } catch (e) {
+    res.redirect('/admin/app-accounts?error=' + encodeURIComponent(e.message));
+  }
+});
+
 // Regenerate key
 router.post('/:id/regenerate-key', (req, res) => {
   const id = req.params.id;

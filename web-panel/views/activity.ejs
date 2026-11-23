@@ -1,28 +1,41 @@
-<%- include('partials/head', { title: 'NOVA XTUNNEL — ' + t('nav.activity') }) %>
+<%- include('partials/head', { title: 'SEN PANEL TUNNEL — ' + t('nav.activity') }) %>
 <div class="shell">
   <%- include('partials/sidebar') %>
   <main class="main">
     <div class="topbar">
       <div>
-        <a href="<%= backUrl %>" class="btn-ghost small" style="margin-bottom:10px; display:inline-block;"><%= t('common.back') %></a>
         <h1 class="page-title"><%= t('nav.activity') %></h1>
+        <p class="page-sub">Historique des actions administratives et des événements de sessions.</p>
       </div>
+      <a href="<%= backUrl %>" class="btn-ghost">
+        <i data-lucide="arrow-left" style="width:14px; height:14px;"></i> <%= t('common.back') %>
+      </a>
     </div>
 
     <div class="panel">
       <% if (activity.length === 0) { %>
-        <div class="empty-state"><%= t('activity.empty') %></div>
+        <div class="empty-state">
+          <i data-lucide="history" style="width:36px; height:36px; opacity:0.3; margin-bottom:8px;"></i>
+          <div><%= t('activity.empty') %></div>
+        </div>
       <% } else { %>
       <div class="table-scroll">
       <table>
         <thead>
-          <tr><th><%= t('activity.th.date') %></th><th><%= t('activity.th.author') %></th><th><%= t('activity.th.action') %></th></tr>
+          <tr>
+            <th><%= t('activity.th.date') %></th>
+            <th><%= t('activity.th.author') %></th>
+            <th><%= t('activity.th.action') %></th>
+          </tr>
         </thead>
         <tbody>
           <% activity.forEach(a => { %>
           <tr>
-            <td class="mono" style="white-space:nowrap;"><%= a.created_at %></td>
-            <td class="mono"><%= a.actor_name %> <span class="quota-text">(<%= a.actor_type %>)</span></td>
+            <td class="mono dim" style="white-space:nowrap; font-size:12px;"><%= a.created_at %></td>
+            <td>
+              <span style="font-weight:600;"><%= a.actor_name %></span>
+              <span class="pill" style="font-size:10px; padding:0 6px;"><%= a.actor_type %></span>
+            </td>
             <td><%= a.message %></td>
           </tr>
           <% }) %>

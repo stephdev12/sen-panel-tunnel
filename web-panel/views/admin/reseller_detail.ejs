@@ -1,8 +1,8 @@
-<%- include('../partials/head', { title: reseller.username + ' — NOVA XTUNNEL' }) %>
+<%- include('../partials/head', { title: reseller.username + ' — SEN PANEL TUNNEL' }) %>
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title"><%= reseller.username %></h1>
@@ -12,50 +12,72 @@
           </span>
         </p>
       </div>
-      <a href="/admin" class="btn-ghost"><%= t('common.back') %></a>
+      <a href="/admin" class="btn-ghost">
+        <i data-lucide="arrow-left" style="width:14px; height:14px;"></i> <%= t('common.back') %>
+      </a>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
+    <!-- 3X-UI Minimal Stat Grid -->
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.online_users') %></div>
-        <div class="stat-value"><%= stats.onlineClientCount %> / <%= reseller.max_users %></div>
-        <div class="quota-text"><span class="quota-text-label">Connexions allouées:</span> <span class="quota-text-value"><%= stats.allocatedConnections %> / <%= reseller.max_users %></span></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('reseller_dash.stat.online_users') %></span>
+          <i data-lucide="users" class="stat-icon"></i>
+        </div>
+        <div class="stat-value"><%= stats.onlineClientCount %> <span class="dim" style="font-size:16px;">/ <%= reseller.max_users %></span></div>
+        <div class="quota-text"><span class="quota-text-label">Allouées:</span> <span class="quota-text-value"><%= stats.allocatedConnections %> / <%= reseller.max_users %></span></div>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.quota_consumed') %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('reseller_dash.stat.quota_consumed') %></span>
+          <i data-lucide="activity" class="stat-icon"></i>
+        </div>
         <div class="stat-value">
-          <%= fmtData(stats.consumedTotalGb) %> / <%= reseller.data_quota_gb == null ? '∞' : fmtData(reseller.data_quota_gb) %>
+          <%= fmtData(stats.consumedTotalGb) %> <span class="dim" style="font-size:15px;">/ <%= reseller.data_quota_gb == null ? '∞' : fmtData(reseller.data_quota_gb) %></span>
         </div>
         <form method="POST" action="/admin/resellers/<%= reseller.id %>/reset-quota" class="inline" style="margin-top:8px;" onsubmit="return confirm('<%= t('detail.reset_quota_confirm') %>');">
-          <button class="btn small subtle" type="submit"><%= t('detail.btn.reset_quota') %></button>
+          <button class="btn small subtle" type="submit">
+            <i data-lucide="rotate-ccw" style="width:12px; height:12px;"></i> <%= t('detail.btn.reset_quota') %>
+          </button>
         </form>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label"><%= t('detail.stat.consumed_deleted') %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('detail.stat.consumed_deleted') %></span>
+          <i data-lucide="archive" class="stat-icon"></i>
+        </div>
         <div class="stat-value mono"><%= fmtData(stats.consumedByDeletedGb) %></div>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.locked_clients') %></div>
-        <div class="stat-value" style="color: var(--warning);"><%= stats.lockedClientCount %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('reseller_dash.stat.locked_clients') %></span>
+          <i data-lucide="lock" class="stat-icon" style="color:var(--warning);"></i>
+        </div>
+        <div class="stat-value warning"><%= stats.lockedClientCount %></div>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.expired_clients') %></div>
-        <div class="stat-value" style="color: var(--warning);"><%= stats.expiredClientCount %></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><%= t('detail.stat.account_expiry') %></div>
-        <div class="stat-value mono" style="font-size:18px;"><%= reseller.expiry_date || t('common.never') %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('detail.stat.account_expiry') %></span>
+          <i data-lucide="calendar" class="stat-icon"></i>
+        </div>
+        <div class="stat-value mono" style="font-size:16px;"><%= reseller.expiry_date || t('common.never') %></div>
       </div>
     </div>
 
+    <!-- Reseller Settings Panel -->
     <div class="panel">
       <div class="panel-head">
-        <h2><%= t('detail.settings_title') %></h2>
+        <h2><i data-lucide="sliders"></i> <%= t('detail.settings_title') %></h2>
         <form method="POST" action="/admin/resellers/<%= reseller.id %>/toggle-lock" class="inline">
           <button class="btn small <%= reseller.status === 'active' ? 'danger' : 'subtle' %>" type="submit">
+            <i data-lucide="<%= reseller.status === 'active' ? 'lock' : 'unlock' %>" style="width:13px; height:13px;"></i>
             <%= reseller.status === 'active' ? t('detail.lock_now') : t('detail.unlock') %>
           </button>
         </form>
@@ -76,43 +98,54 @@
           </div>
         </div>
 
-        <div class="grid-2" style="margin-top:12px; background:rgba(34,211,238,0.06); padding:12px; border-radius:8px; border:1px solid rgba(34,211,238,0.25);">
+        <div class="grid-2" style="margin-top:14px; background:var(--surface-alt); padding:14px; border-radius:var(--radius); border:1px solid var(--border);">
           <div>
-            <label style="color:var(--accent); font-weight:600;">📱 Comptes Surfeo alloués (Max)</label>
+            <label style="color:var(--accent);">Comptes Surfeo alloués (Max)</label>
             <input type="number" name="max_surfeo_users" value="<%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %>" min="0">
           </div>
           <div>
-            <label style="color:var(--accent); font-weight:600;">📊 Quota Données Surfeo (Go)</label>
-            <input type="number" step="0.1" name="surfeo_quota_gb" value="<%= reseller.surfeo_quota_gb == null ? '' : reseller.surfeo_quota_gb %>" placeholder="Laisser vide pour illimité">
+            <label style="color:var(--accent);">Quota Données Surfeo (Go)</label>
+            <input type="number" step="0.1" name="surfeo_quota_gb" value="<%= reseller.surfeo_quota_gb == null ? '' : reseller.surfeo_quota_gb %>" placeholder="Vide = illimité">
           </div>
         </div>
 
-        <label><%= t('form.allowed_protocols') %></label>
-        <div class="checkbox-row">
-          <% const allowed = JSON.parse(reseller.protocols || '[]'); %>
-          <% protocols.forEach(p => { %>
-            <label class="checkbox-pill">
-              <input type="checkbox" name="protocols" value="<%= p.key %>" <%= allowed.includes(p.key) ? 'checked' : '' %>>
-              <%= p.label %>
-            </label>
-          <% }) %>
+        <div style="margin-top:14px;">
+          <label><%= t('form.allowed_protocols') %></label>
+          <div class="checkbox-row">
+            <% const allowed = JSON.parse(reseller.protocols || '[]'); %>
+            <% protocols.forEach(p => { %>
+              <label class="checkbox-pill">
+                <input type="checkbox" name="protocols" value="<%= p.key %>" <%= allowed.includes(p.key) ? 'checked' : '' %>>
+                <%= p.label %>
+              </label>
+            <% }) %>
+          </div>
         </div>
 
-        <label><%= t('common.new_password_optional') %></label>
-        <input type="password" name="new_password">
+        <div style="margin-top:14px;">
+          <label><%= t('common.notes') %></label>
+          <textarea name="notes" rows="2"><%= reseller.notes || '' %></textarea>
+        </div>
 
-        <label><%= t('common.notes_plain') %></label>
-        <textarea name="notes" rows="2"><%= reseller.notes || '' %></textarea>
-
-        <button class="btn" type="submit"><%= t('common.save') %></button>
-      </form>
-
-      <hr class="section-divider">
-      <form method="POST" action="/admin/resellers/<%= reseller.id %>/delete" onsubmit="return confirm('<%= t('detail.delete_confirm') %>');">
-        <button class="btn danger" type="submit"><%= t('detail.delete_reseller') %></button>
+        <div style="margin-top:16px;">
+          <button class="btn" type="submit"><%= t('common.save') %></button>
+        </div>
       </form>
     </div>
 
+    <!-- Password Change -->
+    <div class="panel">
+      <div class="panel-head"><h2><i data-lucide="key"></i> <%= t('detail.password_title') %></h2></div>
+      <form method="POST" action="/admin/resellers/<%= reseller.id %>/password">
+        <label><%= t('common.new_password') %></label>
+        <input type="password" name="new_password" required minlength="6" style="max-width:320px;">
+        <div style="margin-top:12px;">
+          <button class="btn" type="submit"><%= t('common.change_password') %></button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Clients List with 1-click traffic reset -->
     <%- include('../partials/client_manager', {
       createAction: '/admin/resellers/' + reseller.id + '/clients',
       clientBase: '/admin/clients',
@@ -122,7 +155,21 @@
 
     <%- include('../partials/deleted_clients', { deletedClients }) %>
     <%- include('../partials/activity_log', { activity, activityTitle: t('detail.activity_title') }) %>
-  </div>
+
+    <!-- Danger Zone: Delete Reseller -->
+    <div class="panel" style="border-color: var(--danger-border); background: var(--danger-soft);">
+      <div class="panel-head" style="border-color: var(--danger-border);">
+        <h2 style="color:var(--danger);"><i data-lucide="alert-octagon"></i> <%= t('detail.delete_title') %></h2>
+      </div>
+      <p class="muted" style="margin-bottom:14px;"><%= t('detail.delete_warning') %></p>
+      <form method="POST" action="/admin/resellers/<%= reseller.id %>/delete" onsubmit="return confirm('<%= t('detail.delete_confirm') %>');">
+        <button class="btn danger" type="submit">
+          <i data-lucide="trash-2" style="width:14px; height:14px;"></i> <%= t('detail.delete_btn') %>
+        </button>
+      </form>
+    </div>
+
+  </main>
 </div>
 </body>
 </html>

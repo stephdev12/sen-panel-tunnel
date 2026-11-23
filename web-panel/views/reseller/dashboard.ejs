@@ -1,8 +1,8 @@
-<%- include('../partials/head', { title: 'Mes clients — NOVA XTUNNEL' }) %>
+<%- include('../partials/head', { title: 'Mes clients — SEN PANEL TUNNEL' }) %>
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'reseller' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title"><%= t('nav.my_clients') %></h1>
@@ -12,64 +12,86 @@
           </span>
         </p>
       </div>
-      <div class="user-chip"><div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div><span><%= t('common.connected_as') %> <b><%= username %></b></span></div>
+      <div class="user-chip">
+        <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
+        <span><%= t('common.connected_as') %> <b><%= username %></b></span>
+      </div>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
     <% if (reseller.status !== 'active') { %>
       <div class="alert error">
-        <%= t('reseller_dash.locked_msg') %><%= reseller.status === 'locked_expired' ? t('reseller_dash.locked_msg_expired') : '' %><%= t('reseller_dash.locked_msg_suffix') %>
+        <i data-lucide="alert-triangle"></i>
+        <span><%= t('reseller_dash.locked_msg') %><%= reseller.status === 'locked_expired' ? t('reseller_dash.locked_msg_expired') : '' %><%= t('reseller_dash.locked_msg_suffix') %></span>
       </div>
     <% } %>
 
+    <!-- 3X-UI Minimal Stat Grid -->
     <div class="stat-grid">
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.online_users') %> (SSH Standard)</div>
-        <div class="stat-value"><%= stats.onlineClientCount %> / <%= reseller.max_users %></div>
-        <div class="quota-text"><span class="quota-text-label">Connexions allouées:</span> <span class="quota-text-value"><%= stats.allocatedConnections %> / <%= reseller.max_users %></span></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('reseller_dash.stat.online_users') %></span>
+          <i data-lucide="users" class="stat-icon"></i>
+        </div>
+        <div class="stat-value"><%= stats.onlineClientCount %> <span class="dim" style="font-size:16px;">/ <%= reseller.max_users %></span></div>
+        <div class="quota-text"><span class="quota-text-label">Allouées:</span> <span class="quota-text-value"><%= stats.allocatedConnections %> / <%= reseller.max_users %></span></div>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label">📱 Comptes Surfeo alloués</div>
-        <div class="stat-value accent"><%= surfeoAccounts.length %> / <%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %></div>
-        <div class="quota-text"><span class="quota-text-label">Quota alloué:</span> <span class="quota-text-value" style="color:var(--accent);"><%= reseller.surfeo_quota_gb ? reseller.surfeo_quota_gb + ' Go' : 'Illimité' %></span></div>
+        <div class="stat-header">
+          <span class="stat-label">Comptes Surfeo</span>
+          <i data-lucide="smartphone" class="stat-icon" style="color:var(--accent);"></i>
+        </div>
+        <div class="stat-value accent"><%= surfeoAccounts.length %> <span class="dim" style="font-size:16px;">/ <%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %></span></div>
+        <div class="quota-text"><span class="quota-text-label">Quota:</span> <span class="quota-text-value"><%= reseller.surfeo_quota_gb ? reseller.surfeo_quota_gb + ' Go' : 'Illimité' %></span></div>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.quota_consumed') %> (SSH Standard)</div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('reseller_dash.stat.quota_consumed') %></span>
+          <i data-lucide="activity" class="stat-icon"></i>
+        </div>
         <div class="stat-value">
-          <%= fmtData(stats.consumedTotalGb) %> / <%= reseller.data_quota_gb == null ? '∞' : fmtData(reseller.data_quota_gb) %>
+          <%= fmtData(stats.consumedTotalGb) %>
         </div>
         <% if (reseller.data_quota_gb != null) { %>
-          <div class="quota-bar-track" style="margin-top:10px;">
+          <div class="quota-bar-track" style="margin-top:6px;">
             <div class="quota-bar-fill" style="width: <%= Math.min(100, (stats.consumedTotalGb / reseller.data_quota_gb) * 100) %>%;"></div>
           </div>
         <% } %>
       </div>
+
       <div class="stat-card">
-        <div class="stat-label"><%= t('reseller_dash.stat.account_expiry') %></div>
-        <div class="stat-value mono" style="font-size:18px;"><%= reseller.expiry_date || t('common.never') %></div>
+        <div class="stat-header">
+          <span class="stat-label"><%= t('reseller_dash.stat.account_expiry') %></span>
+          <i data-lucide="clock" class="stat-icon"></i>
+        </div>
+        <div class="stat-value mono" style="font-size:16px;"><%= reseller.expiry_date || t('common.never') %></div>
       </div>
     </div>
 
     <% if (typeof createdKey !== 'undefined' && createdKey) { %>
-    <div class="alert" style="background: rgba(34, 211, 238, 0.15); border: 1px solid var(--accent); color: var(--text); padding: 18px; margin-bottom: 20px;">
-      <h3 style="margin-top:0; color:var(--accent);">🔑 Clé d'activation Surfeo générée</h3>
-      <p style="margin-bottom:8px;">Compte : <b><%= createdKey.username %></b> · ID Appareil : <code class="mono"><%= createdKey.deviceId %></code></p>
-      <div style="display:flex; align-items:center; gap:10px; margin: 12px 0;">
-        <input type="text" id="copyKeyInput" value="<%= createdKey.key %>" readonly style="font-family:monospace; font-size:16px; font-weight:bold; letter-spacing:1px; flex:1; background:var(--bg); border:1px solid var(--accent); padding:10px;">
-        <button class="btn" onclick="navigator.clipboard.writeText('<%= createdKey.key %>'); alert('Clé copiée !');">Copier</button>
+    <div class="panel" style="border-color: var(--accent); background: var(--accent-soft);">
+      <div class="panel-head" style="border-color: var(--accent-border);">
+        <h2 style="color:var(--accent);"><i data-lucide="key"></i> Clé d'activation Surfeo générée</h2>
       </div>
-      <p style="font-size:12px; color:var(--muted); margin-bottom:0;">Message client à envoyer :<br>
-        <code>Voici votre clé Surfeo pour l'appareil <%= createdKey.deviceId %> : <%= createdKey.key %></code>
-      </p>
+      <p style="margin-bottom:8px; font-size:13px;">Compte : <b><%= createdKey.username %></b> · Appareil : <code class="mono"><%= createdKey.deviceId %></code></p>
+      <div style="display:flex; align-items:center; gap:8px; margin: 12px 0;">
+        <input type="text" id="copyKeyInput" value="<%= createdKey.key %>" readonly class="mono" style="font-size:15px; font-weight:700; background:var(--bg); border-color:var(--accent-border);">
+        <button class="btn" data-copy-target="copyKeyInput" data-copied-label="Clé copiée !">
+          <i data-lucide="copy" style="width:14px; height:14px;"></i> Copier
+        </button>
+      </div>
+      <p class="dim" style="margin-bottom:0;">Message client : <code>Voici votre clé Surfeo pour l'appareil <%= createdKey.deviceId %> : <%= createdKey.key %></code></p>
     </div>
     <% } %>
 
-    <!-- ---- Section Comptes Surfeo (Mobile App) ---- -->
+    <!-- Section Comptes Surfeo (Mobile App) -->
     <div class="panel">
-      <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center;">
-        <h2>📱 Mes Clients Surfeo (<%= surfeoAccounts.length %> / <%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %>)</h2>
+      <div class="panel-head">
+        <h2><i data-lucide="smartphone"></i> Clients Surfeo (<%= surfeoAccounts.length %> / <%= reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5 %>)</h2>
       </div>
 
       <%
@@ -87,7 +109,10 @@
       %>
 
       <% if (surfeoAccounts.length === 0) { %>
-        <div class="empty-state">Aucun compte client Surfeo créé pour le moment.</div>
+        <div class="empty-state">
+          <i data-lucide="smartphone" style="width:36px; height:36px; opacity:0.3; margin-bottom:8px;"></i>
+          <div>Aucun compte client Surfeo créé pour le moment.</div>
+        </div>
       <% } else { %>
       <div class="table-scroll">
         <table>
@@ -97,10 +122,9 @@
               <th>Appareils</th>
               <th>Profil</th>
               <th>Statut</th>
-              <th>Consommation / Quota</th>
+              <th>Trafic / Quota</th>
               <th>Clé (Fin)</th>
-              <th>Dernière activité</th>
-              <th>Actions</th>
+              <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -108,53 +132,64 @@
             <tr>
               <td><b><%= a.username %></b></td>
               <td>
-                <b style="color:var(--accent);"><%= a.devices ? a.devices.length : (a.device_id ? 1 : 0) %> / <%= a.max_devices || 2 %></b>
+                <span class="mono" style="font-weight:600;"><%= a.devices ? a.devices.length : (a.device_id ? 1 : 0) %> / <%= a.max_devices || 2 %></span>
                 <% if (a.devices && a.devices.length > 0) { %>
-                  <div style="font-size:10px; color:var(--muted); margin-top:2px;">
+                  <div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:2px;">
                     <% a.devices.forEach(d => { %>
-                      <span class="pill" style="font-size:9px; padding:1px 5px;"><%= d.device_platform || 'device' %></span>
+                      <span class="pill" style="font-size:9.5px; padding:0 5px;"><%= d.device_platform || 'device' %></span>
                     <% }) %>
                   </div>
                 <% } else if (a.device_id) { %>
-                  <div style="font-size:10px; color:var(--muted);"><code class="mono"><%= a.device_id.slice(0, 9) %>...</code></div>
+                  <div class="dim" style="font-size:10px;"><code class="mono"><%= a.device_id.slice(0, 9) %>...</code></div>
                 <% } else { %>
-                  <div style="font-size:10px; color:var(--muted);">En attente</div>
+                  <div class="dim" style="font-size:10px;">En attente</div>
                 <% } %>
               </td>
-              <td><%= a.profile_name || '-' %> (v<%= a.profile_version || '1' %>)</td>
+              <td><span class="mono" style="font-size:12px;"><%= a.profile_name || '-' %></span></td>
               <td>
-                <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'locked_manual' : 'locked_expired') %>">
+                <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'pending' : 'danger') %>">
                   <%= a.state %>
                 </span>
               </td>
               <td>
                 <div style="min-width: 130px;">
-                  <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
-                    <b style="color:var(--text);"><%= formatByteCount(a.usedBytes) %></b>
-                    <span style="color:var(--muted);"><%= a.quota_gb ? a.quota_gb + ' Go' : 'Illimité' %></span>
+                  <div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:3px;">
+                    <span class="mono" style="font-weight:600;"><%= formatByteCount(a.usedBytes) %></span>
+                    <span class="dim"><%= a.quota_gb ? a.quota_gb + ' Go' : 'Illimité' %></span>
                   </div>
                   <% if (a.quota_gb > 0) { %>
-                    <div style="background:var(--bg); border-radius:4px; height:6px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
-                      <div style="width:<%= Math.min(100, a.percentUsed) %>%; height:100%; background:<%= a.percentUsed >= 95 ? 'var(--danger)' : (a.percentUsed >= 80 ? 'var(--warning)' : 'var(--accent)') %>; border-radius:4px;"></div>
+                    <div class="quota-bar-track">
+                      <div class="quota-bar-fill <%= a.percentUsed >= 90 ? 'quota-bar-danger' : (a.percentUsed >= 75 ? 'quota-bar-warning' : '') %>" style="width:<%= Math.min(100, a.percentUsed) %>%;"></div>
                     </div>
-                    <div style="font-size:10px; color:var(--muted); text-align:right; margin-top:2px;"><%= a.percentUsed %>% consommé</div>
-                  <% } else { %>
-                    <div style="font-size:10px; color:var(--accent); font-weight:500;">Forfait Illimité</div>
                   <% } %>
                 </div>
               </td>
-              <td class="mono">...<%= a.key_last4 || '----' %></td>
-              <td class="mono" style="font-size:12px;"><%= a.last_active_at ? a.last_active_at.replace('T', ' ').slice(0, 19) : 'Jamais' %></td>
-              <td>
-                <div style="display:flex; gap:6px;">
-                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/regenerate-key" onsubmit="return confirm('Générer une nouvelle clé pour ce compte ?');">
-                    <button type="submit" class="btn small subtle" title="Régénérer la clé">Clé</button>
+              <td class="mono dim">...<%= a.key_last4 || '----' %></td>
+              <td class="actions-cell">
+                <div class="action-strip">
+                  <!-- 1-Click Direct Traffic Reset Button -->
+                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/reset-traffic" class="inline" onsubmit="return confirm('Remettre le trafic de <%= a.username %> à zéro ?');">
+                    <button type="submit" class="icon-btn action-reset" title="Remettre le trafic à zéro (1-clic)">
+                      <i data-lucide="rotate-ccw"></i>
+                    </button>
                   </form>
-                  <form method="POST" action="/reseller/app-accounts/<%= a.id %>/reset-devices" onsubmit="return confirm('Dissocier tous les appareils liés ?');">
-                    <button type="submit" class="btn small subtle" title="Dissocier les appareils">Délier</button>
+
+                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/regenerate-key" class="inline" onsubmit="return confirm('Générer une nouvelle clé pour <%= a.username %> ?');">
+                    <button type="submit" class="icon-btn" title="Régénérer la clé d'activation">
+                      <i data-lucide="key"></i>
+                    </button>
                   </form>
-                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/delete" onsubmit="return confirm('Supprimer ce compte Surfeo ?');">
-                    <button type="submit" class="btn small error">Suppr</button>
+
+                  <form method="POST" action="/reseller/app-accounts/<%= a.id %>/reset-devices" class="inline" onsubmit="return confirm('Dissocier tous les appareils liés ?');">
+                    <button type="submit" class="icon-btn" title="Dissocier les appareils">
+                      <i data-lucide="smartphone-nfc"></i>
+                    </button>
+                  </form>
+
+                  <form method="POST" action="/reseller/surfeo/<%= a.id %>/delete" class="inline" onsubmit="return confirm('Supprimer ce compte Surfeo ?');">
+                    <button type="submit" class="icon-btn action-danger" title="Supprimer définitivement">
+                      <i data-lucide="trash-2"></i>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -170,17 +205,17 @@
     <% if (surfeoAccounts.length < (reseller.max_surfeo_users != null ? reseller.max_surfeo_users : 5)) { %>
     <div class="panel">
       <div class="panel-head">
-        <h2>Créer une clé client Surfeo (Multi-appareils)</h2>
+        <h2><i data-lucide="plus-circle"></i> Créer une clé client Surfeo</h2>
       </div>
-      <form method="POST" action="/reseller/surfeo/create" style="padding:16px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;">
+      <form method="POST" action="/reseller/surfeo/create">
+        <div class="grid-3">
           <div>
             <label for="username">Identifiant SSH</label>
             <input type="text" id="username" name="username" required placeholder="ex: client01">
           </div>
           <div>
             <label for="device_id">ID Appareil (Optionnel)</label>
-            <input type="text" id="device_id" name="device_id" placeholder="Vide = auto-liaison">
+            <input type="text" id="device_id" name="device_id" placeholder="Vide = liaison auto" class="mono">
           </div>
           <div>
             <label for="max_devices">Max appareils</label>
@@ -188,7 +223,7 @@
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:14px;">
+        <div class="grid-3" style="margin-top:14px;">
           <div>
             <label for="profile_id">Profil de connexion</label>
             <select id="profile_id" name="profile_id" required>
@@ -200,9 +235,6 @@
           <div>
             <label for="quota_gb">Quota de données (Go)</label>
             <input type="number" step="0.1" id="quota_gb" name="quota_gb" placeholder="Vide = Illimité" <%= reseller.surfeo_quota_gb ? 'max="' + reseller.surfeo_quota_gb + '"' : '' %>>
-            <% if (reseller.surfeo_quota_gb) { %>
-              <small style="color:var(--muted); font-size:11px;">Max alloué : <%= reseller.surfeo_quota_gb %> Go</small>
-            <% } %>
           </div>
           <div>
             <label for="expiry_date">Date d'expiration</label>
@@ -210,8 +242,10 @@
           </div>
         </div>
 
-        <div style="margin-top:16px; display:flex; justify-content:flex-end;">
-          <button type="submit" class="btn primary">Générer l'accès Surfeo</button>
+        <div style="margin-top:16px;">
+          <button type="submit" class="btn">
+            <i data-lucide="check" style="width:14px; height:14px;"></i> Générer l'accès Surfeo
+          </button>
         </div>
       </form>
     </div>
@@ -227,15 +261,17 @@
     <%- include('../partials/deleted_clients', { deletedClients }) %>
 
     <div class="panel">
-      <div class="panel-head"><h2><%= t('reseller_dash.account_title') %></h2></div>
+      <div class="panel-head"><h2><i data-lucide="lock"></i> <%= t('reseller_dash.account_title') %></h2></div>
       <form method="POST" action="/reseller/change-password">
         <label><%= t('common.new_password') %></label>
         <input type="password" name="new_password" required minlength="6">
-        <button class="btn" type="submit"><%= t('common.change_password') %></button>
+        <div style="margin-top:12px;">
+          <button class="btn" type="submit"><%= t('common.change_password') %></button>
+        </div>
       </form>
     </div>
 
-  </div>
+  </main>
 </div>
 </body>
 </html>

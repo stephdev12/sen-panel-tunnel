@@ -2,11 +2,11 @@
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title">Comptes App Surfeo</h1>
-        <p class="page-sub">Créez des accès liés par empreinte matérielle (ID appareil) et générez les clés d'activation.</p>
+        <p class="page-sub">Gestion des accès client, liaisons matérielles et quotas pour l'application mobile Surfeo.</p>
       </div>
       <div class="user-chip">
         <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
@@ -14,120 +14,179 @@
       </div>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
     <% if (createdKey) { %>
-    <div class="alert" style="background: rgba(34, 211, 238, 0.15); border: 1px solid var(--accent); color: var(--text); padding: 18px; margin-bottom: 20px;">
-      <h3 style="margin-top:0; color:var(--accent);">🔑 Clé d'activation générée (affichée une seule fois)</h3>
-      <p style="margin-bottom:8px;">Compte : <b><%= createdKey.username %></b> · ID Appareil : <code class="mono"><%= createdKey.deviceId %></code></p>
-      <div style="display:flex; align-items:center; gap:10px; margin: 12px 0;">
-        <input type="text" id="copyKeyInput" value="<%= createdKey.key %>" readonly style="font-family:monospace; font-size:16px; font-weight:bold; letter-spacing:1px; flex:1; background:var(--bg); border:1px solid var(--accent); padding:10px;">
-        <button class="btn" onclick="navigator.clipboard.writeText('<%= createdKey.key %>'); alert('Clé copiée !');">Copier</button>
+    <div class="panel" style="border-color: var(--accent); background: var(--accent-soft);">
+      <div class="panel-head" style="border-color: var(--accent-border);">
+        <h2 style="color: var(--accent);"><i data-lucide="key"></i> Clé d'activation générée (affichée une seule fois)</h2>
       </div>
-      <p style="font-size:12px; color:var(--muted); margin-bottom:0;">Message client à envoyer :<br>
-        <code>Voici ta clé d'activation Surfeo pour l'appareil <%= createdKey.deviceId %> : <%= createdKey.key %></code>
-      </p>
+      <p style="margin-bottom:8px; font-size:13px;">Compte : <b><%= createdKey.username %></b> · Appareil : <code class="mono"><%= createdKey.deviceId %></code></p>
+      <div style="display:flex; align-items:center; gap:8px; margin: 12px 0;">
+        <input type="text" id="copyKeyInput" value="<%= createdKey.key %>" readonly class="mono" style="font-size:15px; font-weight:700; letter-spacing:0.05em; background:var(--bg); border-color:var(--accent-border);">
+        <button class="btn" style="white-space:nowrap;" data-copy-target="copyKeyInput" data-copied-label="Clé copiée !">
+          <i data-lucide="copy" style="width:14px; height:14px;"></i> Copier
+        </button>
+      </div>
+      <p class="dim" style="margin-bottom:0;">Message client : <code>Voici ta clé d'activation Surfeo pour l'appareil <%= createdKey.deviceId %> : <%= createdKey.key %></code></p>
     </div>
     <% } %>
 
+    <%
+    function formatByteCount(b) {
+      if (b == null || b <= 0) return '0 B';
+      const units = ['B', 'Ko', 'Mo', 'Go', 'To'];
+      let idx = 0;
+      let val = b;
+      while (val >= 1024 && idx < units.length - 1) {
+        val /= 1024;
+        idx++;
+      }
+      return (idx === 0 ? Math.round(val) : val.toFixed(val < 10 ? 2 : 1)) + ' ' + units[idx];
+    }
+    const totalBytes = accounts.reduce((sum, a) => sum + (a.usedBytes || 0), 0);
+    const activeAccounts = accounts.filter(a => a.state === 'active').length;
+    %>
+
+    <!-- 3X-UI Minimal Stat Grid -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Comptes Créés</span>
+          <i data-lucide="smartphone" class="stat-icon"></i>
+        </div>
+        <div class="stat-value"><%= accounts.length %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Comptes Actifs</span>
+          <i data-lucide="shield-check" class="stat-icon" style="color:var(--success);"></i>
+        </div>
+        <div class="stat-value success"><%= activeAccounts %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Consommation Totale</span>
+          <i data-lucide="activity" class="stat-icon" style="color:var(--accent);"></i>
+        </div>
+        <div class="stat-value accent"><%= formatByteCount(totalBytes) %></div>
+      </div>
+    </div>
+
+    <!-- Accounts List -->
     <div class="panel">
       <div class="panel-head">
-        <h2>Comptes liés (<%= accounts.length %>)</h2>
+        <h2><i data-lucide="users"></i> Comptes Surfeo (<%= accounts.length %>)</h2>
       </div>
+
       <% if (accounts.length === 0) { %>
-        <div class="empty-state">Aucun compte lié à l'application. Créez-en un avec le formulaire ci-dessous.</div>
+        <div class="empty-state">
+          <i data-lucide="smartphone" style="width:36px; height:36px; opacity:0.3; margin-bottom:8px;"></i>
+          <div>Aucun compte lié à l'application pour le moment.</div>
+        </div>
       <% } else { %>
       <div class="table-scroll">
-        <%
-        function formatByteCount(b) {
-          if (b == null || b <= 0) return '0 B';
-          const units = ['B', 'Ko', 'Mo', 'Go', 'To'];
-          let idx = 0;
-          let val = b;
-          while (val >= 1024 && idx < units.length - 1) {
-            val /= 1024;
-            idx++;
-          }
-          return (idx === 0 ? Math.round(val) : val.toFixed(val < 10 ? 2 : 1)) + ' ' + units[idx];
-        }
-        %>
         <table>
           <thead>
             <tr>
               <th>Identifiant</th>
-              <th>Appareils liés</th>
-              <th>Créé par</th>
+              <th>Appareils</th>
+              <th>Revendeur</th>
               <th>Profil</th>
               <th>Statut</th>
-              <th>Consommation / Quota</th>
+              <th>Trafic / Quota</th>
               <th>Clé (Fin)</th>
-              <th>Dernière activité</th>
-              <th>Actions</th>
+              <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
           <tbody>
             <% accounts.forEach(a => { %>
             <tr>
-              <td><b><%= a.username %></b></td>
               <td>
-                <b style="color:var(--accent);"><%= a.devices ? a.devices.length : (a.device_id ? 1 : 0) %> / <%= a.max_devices || 2 %></b>
+                <div style="font-weight:600;"><%= a.username %></div>
+                <div class="dim" style="font-size:11px;">#<%= a.id %></div>
+              </td>
+              <td>
+                <span class="mono" style="font-weight:600; color:var(--text);">
+                  <%= a.devices ? a.devices.length : (a.device_id ? 1 : 0) %> / <%= a.max_devices || 2 %>
+                </span>
                 <% if (a.devices && a.devices.length > 0) { %>
-                  <div style="font-size:11px; color:var(--muted); margin-top:2px; display:flex; flex-wrap:wrap; gap:4px;">
+                  <div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:2px;">
                     <% a.devices.forEach(d => { %>
-                      <span class="pill" style="font-size:10px; padding:1px 6px; text-transform:capitalize;" title="ID: <%= d.device_id %> (v<%= d.app_version %>)">
+                      <span class="pill" style="font-size:9.5px; padding:0 5px;" title="ID: <%= d.device_id %>">
                         <%= d.device_platform || 'device' %>
                       </span>
                     <% }) %>
                   </div>
                 <% } else if (a.device_id) { %>
-                  <div style="font-size:11px; color:var(--muted);"><code class="mono"><%= a.device_id.slice(0, 9) %>...</code></div>
+                  <div class="dim" style="font-size:11px;"><code class="mono"><%= a.device_id.slice(0, 9) %>...</code></div>
                 <% } else { %>
-                  <div style="font-size:11px; color:var(--muted);">En attente de liaison</div>
+                  <div class="dim" style="font-size:11px;">En attente</div>
                 <% } %>
               </td>
               <td>
-                <span class="pill" style="font-size:11px; <%= a.reseller_name ? 'background:rgba(124,92,255,0.15); color:var(--violet);' : 'background:rgba(34,211,238,0.15); color:var(--accent);' %>">
+                <span class="pill" style="font-size:11px;">
                   <%= a.reseller_name ? a.reseller_name : 'Admin' %>
                 </span>
               </td>
-              <td><%= a.profile_name || '-' %> (v<%= a.profile_version || '1' %>)</td>
               <td>
-                <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'locked_manual' : 'locked_expired') %>">
+                <span class="mono" style="font-size:12px;"><%= a.profile_name || '-' %></span>
+              </td>
+              <td>
+                <span class="pill <%= a.state === 'active' ? 'active' : (a.state === 'pending' ? 'pending' : 'danger') %>">
                   <%= a.state %>
                 </span>
               </td>
               <td>
-                <div style="min-width: 140px;">
-                  <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;">
-                    <b style="color:var(--text);"><%= formatByteCount(a.usedBytes) %></b>
-                    <span style="color:var(--muted);"><%= a.quota_gb ? a.quota_gb + ' Go' : 'Illimité' %></span>
+                <div style="min-width: 130px;">
+                  <div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:3px;">
+                    <span class="mono" style="font-weight:600;"><%= formatByteCount(a.usedBytes) %></span>
+                    <span class="dim"><%= a.quota_gb ? a.quota_gb + ' Go' : 'Illimité' %></span>
                   </div>
                   <% if (a.quota_gb > 0) { %>
-                    <div style="background:var(--bg); border-radius:4px; height:6px; overflow:hidden; border:1px solid rgba(255,255,255,0.08);">
-                      <div style="width:<%= Math.min(100, a.percentUsed) %>%; height:100%; background:<%= a.percentUsed >= 95 ? 'var(--danger)' : (a.percentUsed >= 80 ? 'var(--warning)' : 'var(--accent)') %>; border-radius:4px;"></div>
+                    <div class="quota-bar-track">
+                      <div class="quota-bar-fill <%= a.percentUsed >= 90 ? 'quota-bar-danger' : (a.percentUsed >= 75 ? 'quota-bar-warning' : '') %>" style="width:<%= Math.min(100, a.percentUsed) %>%;"></div>
                     </div>
-                    <div style="font-size:10px; color:var(--muted); text-align:right; margin-top:2px;"><%= a.percentUsed %>% consommé</div>
-                  <% } else { %>
-                    <div style="font-size:10px; color:var(--accent); font-weight:500;">Forfait Illimité</div>
                   <% } %>
                 </div>
               </td>
-              <td class="mono">...<%= a.key_last4 || '----' %></td>
-              <td class="mono" style="font-size:12px;"><%= a.last_active_at ? a.last_active_at.replace('T', ' ').slice(0, 19) : 'Jamais' %></td>
-              <td>
-                <div style="display:flex; gap:6px;">
-                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/regenerate-key" onsubmit="return confirm('Régénérer une nouvelle clé pour ce compte ?');">
-                    <button type="submit" class="btn small subtle" title="Régénérer la clé">Clé</button>
+              <td class="mono dim">...<%= a.key_last4 || '----' %></td>
+              <td class="actions-cell">
+                <div class="action-strip">
+                  <!-- 1-Click Direct Traffic Reset Button -->
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/reset-traffic" class="inline" onsubmit="return confirm('Remettre le trafic de <%= a.username %> à zéro ?');">
+                    <button type="submit" class="icon-btn action-reset" title="Remettre le trafic à zéro (1-clic)">
+                      <i data-lucide="rotate-ccw"></i>
+                    </button>
                   </form>
-                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/reset-devices" onsubmit="return confirm('Dissocier tous les appareils liés à ce compte pour permettre d\'en enregistrer de nouveaux ?');">
-                    <button type="submit" class="btn small subtle" title="Dissocier tous les appareils">Délier</button>
+
+                  <!-- Regenerate Key -->
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/regenerate-key" class="inline" onsubmit="return confirm('Régénérer une nouvelle clé pour <%= a.username %> ?');">
+                    <button type="submit" class="icon-btn" title="Régénérer la clé d'activation">
+                      <i data-lucide="key"></i>
+                    </button>
                   </form>
-                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/revoke" onsubmit="return confirm('Révoquer ce compte ?');">
-                    <button type="submit" class="btn small warning">Révoquer</button>
+
+                  <!-- Reset Devices -->
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/reset-devices" class="inline" onsubmit="return confirm('Dissocier tous les appareils de <%= a.username %> ?');">
+                    <button type="submit" class="icon-btn" title="Dissocier les appareils liés">
+                      <i data-lucide="smartphone-nfc"></i>
+                    </button>
                   </form>
-                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/delete" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
-                    <button type="submit" class="btn small error">Suppr</button>
+
+                  <!-- Revoke -->
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/revoke" class="inline" onsubmit="return confirm('Révoquer l\'accès pour <%= a.username %> ?');">
+                    <button type="submit" class="icon-btn action-warn" title="Révoquer l'accès">
+                      <i data-lucide="shield-alert"></i>
+                    </button>
+                  </form>
+
+                  <!-- Delete -->
+                  <form method="POST" action="/admin/app-accounts/<%= a.id %>/delete" class="inline" onsubmit="return confirm('Supprimer définitivement <%= a.username %> ?');">
+                    <button type="submit" class="icon-btn action-danger" title="Supprimer définitivement">
+                      <i data-lucide="trash-2"></i>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -142,34 +201,33 @@
     <!-- Create App Account Form -->
     <div class="panel">
       <div class="panel-head">
-        <h2>Créer un forfait app (Clé multi-appareils)</h2>
+        <h2><i data-lucide="plus-circle"></i> Créer un forfait Surfeo</h2>
       </div>
-      <form method="POST" action="/admin/app-accounts/create" style="padding:16px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+      <form method="POST" action="/admin/app-accounts/create">
+        <div class="grid-2">
           <div>
             <label for="username">Identifiant SSH</label>
             <input type="text" id="username" name="username" required placeholder="ex: surfeo_user01">
           </div>
           <div>
-            <label for="password">Mot de passe SSH (vide = aléatoire fort)</label>
+            <label for="password">Mot de passe SSH (vide = automatique)</label>
             <input type="password" id="password" name="password" placeholder="Laisser vide pour auto-génération">
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:16px; margin-top:16px;">
+        <div class="grid-2" style="margin-top:14px;">
           <div>
             <label for="device_id">ID de l'appareil (Optionnel)</label>
-            <input type="text" id="device_id" name="device_id" placeholder="Laisser vide pour auto-liaison lors de la 1ère connexion" style="font-family:monospace; font-size:14px;">
-            <small style="color:var(--muted);">Optionnel. Si laissé vide, l'appareil s'associera automatiquement lors de la première utilisation de la clé.</small>
+            <input type="text" id="device_id" name="device_id" placeholder="Vide = liaison auto à la 1ère activation" class="mono">
+            <span class="dim" style="display:block; margin-top:3px;">L'appareil sera lié automatiquement dès la 1ère connexion avec la clé.</span>
           </div>
           <div>
             <label for="max_devices">Nombre max d'appareils</label>
             <input type="number" id="max_devices" name="max_devices" value="2" min="1" max="100" required>
-            <small style="color:var(--muted);">Quota d'appareils autorisés</small>
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px;">
+        <div class="grid-2" style="margin-top:14px;">
           <div>
             <label for="profile_id">Profil de connexion</label>
             <select id="profile_id" name="profile_id" required>
@@ -184,40 +242,25 @@
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px;">
+        <div class="grid-2" style="margin-top:14px;">
           <div>
             <label for="quota_gb">Quota de données en Go (vide = illimité)</label>
             <input type="number" step="0.1" id="quota_gb" name="quota_gb" placeholder="ex: 50">
           </div>
           <div>
-            <label for="max_connections">Limite de sessions simultanées</label>
+            <label for="max_connections">Sessions simultanées max</label>
             <input type="number" id="max_connections" name="max_connections" value="2">
           </div>
         </div>
 
         <div style="margin-top:20px;">
-          <button type="submit" class="btn">Créer le compte et générer la clé</button>
+          <button type="submit" class="btn">
+            <i data-lucide="check" style="width:15px; height:15px;"></i> Créer le compte et générer la clé
+          </button>
         </div>
       </form>
     </div>
-  </div>
+  </main>
 </div>
-
-<!-- Modal / Form for changing device ID -->
-<form id="changeDeviceForm" method="POST" style="display:none;">
-  <input type="hidden" name="new_device_id" id="changeDeviceInput">
-</form>
-
-<script>
-function promptChangeDevice(id, username, currentDevice) {
-  var newId = prompt('Entrez le nouvel ID appareil pour ' + username + ' (format: XXXX-XXXX-XXXX-X) :', currentDevice);
-  if (newId && newId !== currentDevice) {
-    var form = document.getElementById('changeDeviceForm');
-    form.action = '/admin/app-accounts/' + id + '/change-device-id';
-    document.getElementById('changeDeviceInput').value = newId;
-    form.submit();
-  }
-}
-</script>
 </body>
 </html>

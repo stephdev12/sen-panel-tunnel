@@ -289,6 +289,30 @@ function handleResetDevices(req, res) {
 router.post('/app-accounts/:id/reset-devices', handleResetDevices);
 router.post('/surfeo/:id/reset-devices', handleResetDevices);
 
+// Reset traffic for reseller Surfeo account (1-click direct reset)
+router.post('/surfeo/:id/reset-traffic', (req, res) => {
+  const reseller = loadSelf(req);
+  const id = req.params.id;
+  try {
+    const acc = db.prepare('SELECT * FROM app_accounts WHERE id = ? AND reseller_id = ?').get(id, reseller.id);
+    if (!acc) throw new Error('Compte Surfeo introuvable ou non autorisé.');
+
+    system.resetSshUsage(acc.username);
+    try { system.unlockSshUser(acc.username); } catch {}
+
+    const today = new Date().toISOString().slice(0, 10);
+    const isDateExpired = acc.expiry_date && acc.expiry_date < today;
+    if ((acc.state === 'expired' || acc.state === 'quota_exceeded') && !isDateExpired) {
+      db.prepare("UPDATE app_accounts SET state = 'active' WHERE id = ?").run(id);
+    }
+
+    audit.log('reseller', reseller.username, 'app_account_reset_traffic', `Trafic réinitialisé à zéro pour "${acc.username}"`, id);
+    res.redirect('/reseller?success=' + encodeURIComponent(`Trafic réinitialisé à zéro pour ${acc.username}.`));
+  } catch (e) {
+    res.redirect('/reseller?error=' + encodeURIComponent(e.message));
+  }
+});
+
 router.post('/surfeo/:id/regenerate-key', (req, res) => {
   const reseller = loadSelf(req);
   const id = req.params.id;

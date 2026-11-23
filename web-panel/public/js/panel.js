@@ -1,8 +1,11 @@
-// NOVA XTUNNEL - shared panel behaviors (loaded on every page via partials/head.ejs)
+// SEN PANEL TUNNEL — Minimalist panel behaviors with Lucide icons
 
 (function () {
-  const EYE_OPEN = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.4"/></svg>';
-  const EYE_OFF = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 8s2.5-5 7-5c1.4 0 2.6.4 3.6 1M15 8s-2.5 5-7 5c-1.4 0-2.6-.4-3.6-1" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 1.5l13 13" stroke="currentColor" stroke-width="1.4"/></svg>';
+  function initLucide() {
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      lucide.createIcons();
+    }
+  }
 
   function attachPasswordToggles() {
     document.querySelectorAll('input[type="password"]').forEach((input) => {
@@ -19,14 +22,17 @@
       btn.className = 'password-toggle';
       btn.setAttribute('aria-label', 'Afficher le mot de passe');
       btn.tabIndex = -1;
-      btn.innerHTML = EYE_OPEN;
+      btn.innerHTML = '<i data-lucide="eye" style="width:16px;height:16px;"></i>';
       wrapper.appendChild(btn);
 
       btn.addEventListener('click', () => {
         const willShow = input.type === 'password';
         input.type = willShow ? 'text' : 'password';
-        btn.innerHTML = willShow ? EYE_OFF : EYE_OPEN;
+        btn.innerHTML = willShow
+          ? '<i data-lucide="eye-off" style="width:16px;height:16px;"></i>'
+          : '<i data-lucide="eye" style="width:16px;height:16px;"></i>';
         btn.setAttribute('aria-label', willShow ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+        initLucide();
       });
     });
   }
@@ -68,7 +74,7 @@
       btn.addEventListener('click', () => {
         const source = document.getElementById(btn.dataset.copyTarget);
         if (!source) return;
-        const text = source.textContent.trim();
+        const text = (source.value !== undefined ? source.value : source.textContent).trim();
         const done = () => {
           showCopyToast(btn.dataset.copiedLabel || 'Copié !');
           document.querySelectorAll('.action-menu.open').forEach((m) => m.classList.remove('open'));
@@ -91,9 +97,11 @@
   }
 
   function initAll() {
+    initLucide();
     attachPasswordToggles();
     attachActionMenus();
     attachCopyButtons();
+    initLucide();
   }
 
   if (document.readyState === 'loading') {

@@ -2,11 +2,11 @@
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title">Profils de Connexion</h1>
-        <p class="page-sub">Gérez les configurations injectées automatiquement dans l'application Surfeo.</p>
+        <p class="page-sub">Gérez les profils et configurations injectés automatiquement dans l'application Surfeo.</p>
       </div>
       <div class="user-chip">
         <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
@@ -14,15 +14,18 @@
       </div>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
     <div class="panel">
       <div class="panel-head">
-        <h2>Profils actifs (<%= profiles.length %>)</h2>
+        <h2><i data-lucide="layers"></i> Profils actifs (<%= profiles.length %>)</h2>
       </div>
       <% if (profiles.length === 0) { %>
-        <div class="empty-state">Aucun profil de connexion configuré. Créez-en un ci-dessous.</div>
+        <div class="empty-state">
+          <i data-lucide="layers" style="width:36px; height:36px; opacity:0.3; margin-bottom:8px;"></i>
+          <div>Aucun profil de connexion configuré. Créez-en un ci-dessous.</div>
+        </div>
       <% } else { %>
       <div class="table-scroll">
         <table>
@@ -34,22 +37,26 @@
               <th>Hôte / Serveur</th>
               <th>Port</th>
               <th>Statut</th>
-              <th>Actions</th>
+              <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
           <tbody>
             <% profiles.forEach(p => { %>
             <tr>
               <td><b><%= p.name %></b></td>
-              <td><span class="pill <%= p.type === 'ssh' ? 'active' : 'locked_manual' %>"><%= p.type.toUpperCase() %></span></td>
-              <td class="mono">v<%= p.version %></td>
+              <td><span class="pill" style="color:var(--accent);"><%= p.type.toUpperCase() %></span></td>
+              <td class="mono dim">v<%= p.version %></td>
               <td class="mono"><%= p.type === 'ssh' ? (p.parsedParams.host || '-') : (p.parsedParams.server || '-') %></td>
-              <td class="mono"><%= p.type === 'ssh' ? p.parsedParams.port : p.parsedParams.port %></td>
-              <td><span class="pill <%= p.is_active ? 'active' : 'locked_expired' %>"><%= p.is_active ? 'Actif' : 'Inactif' %></span></td>
-              <td>
-                <form method="POST" action="/admin/profiles/<%= p.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce profil ?');">
-                  <button type="submit" class="btn small error">Supprimer</button>
-                </form>
+              <td class="mono dim"><%= p.type === 'ssh' ? p.parsedParams.port : p.parsedParams.port %></td>
+              <td><span class="pill <%= p.is_active ? 'active' : 'deleted' %>"><%= p.is_active ? 'Actif' : 'Inactif' %></span></td>
+              <td class="actions-cell">
+                <div class="action-strip">
+                  <form method="POST" action="/admin/profiles/<%= p.id %>/delete" class="inline" onsubmit="return confirm('Supprimer ce profil ?');">
+                    <button type="submit" class="icon-btn action-danger" title="Supprimer">
+                      <i data-lucide="trash-2"></i>
+                    </button>
+                  </form>
+                </div>
               </td>
             </tr>
             <% }) %>
@@ -62,10 +69,10 @@
     <!-- Create Profile Form -->
     <div class="panel">
       <div class="panel-head">
-        <h2>Créer un nouveau profil de connexion</h2>
+        <h2><i data-lucide="plus-circle"></i> Créer un nouveau profil</h2>
       </div>
-      <form method="POST" action="/admin/profiles/create" style="padding:16px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+      <form method="POST" action="/admin/profiles/create">
+        <div class="grid-2">
           <div>
             <label for="name">Nom du profil (interne)</label>
             <input type="text" id="name" name="name" required placeholder="ex: CloudFront WebSocket Standard">
@@ -80,82 +87,81 @@
         </div>
 
         <!-- SSH Settings -->
-        <div id="sshFields" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
-          <h3 style="font-size:15px; margin-bottom:12px;">Paramètres SSH</h3>
-          <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:16px;">
+        <div id="sshFields" style="margin-top:16px; border-top:1px solid var(--border); padding-top:14px;">
+          <h3 style="font-size:13px; font-weight:600; margin-bottom:12px; color:var(--muted);">PARAMÈTRES SSH</h3>
+          <div class="grid-3">
             <div>
-              <label for="host">Hôte (Domaine CloudFront ou IP)</label>
-              <input type="text" id="host" name="host" placeholder="d1url4lvz5mor6.cloudfront.net">
+              <label for="host">Hôte (CloudFront ou IP)</label>
+              <input type="text" id="host" name="host" placeholder="d1url4lvz5mor6.cloudfront.net" class="mono">
             </div>
             <div>
               <label for="port">Port</label>
-              <input type="number" id="port" name="port" value="80">
+              <input type="number" id="port" name="port" value="80" class="mono">
             </div>
             <div>
               <label for="udpgwPort">Port UDPGW</label>
-              <input type="number" id="udpgwPort" name="udpgwPort" value="7300">
+              <input type="number" id="udpgwPort" name="udpgwPort" value="7300" class="mono">
             </div>
           </div>
 
-          <div style="margin-top:12px;">
-            <label style="display:inline-flex; align-items:center; gap:8px;">
-              <input type="checkbox" id="tls" name="tls">
-              Activer TLS / SSL
-            </label>
+          <div style="margin-top:14px;">
+            <label for="payload">Payload HTTP (optionnel, pour injection proxy)</label>
+            <textarea id="payload" name="payload" rows="2" class="mono" placeholder="GET / HTTP/1.1[crlf]Host: domain.com[crlf]..."></textarea>
           </div>
 
-          <div style="margin-top:12px;">
-            <label for="sni">SNI (Server Name Indication si TLS actif)</label>
-            <input type="text" id="sni" name="sni" placeholder="optionnel si non TLS">
-          </div>
-
-          <div style="margin-top:12px;">
-            <label for="payload">Payload HTTP (macros: [crlf], [ua], [host], [port], [host_port])</label>
-            <textarea id="payload" name="payload" rows="3" style="width:100%; font-family:monospace;">GET /sen HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]</textarea>
-          </div>
-
-          <div style="margin-top:12px;">
-            <label for="dns">Serveurs DNS (séparés par des virgules)</label>
-            <input type="text" id="dns" name="dns" value="1.1.1.1, 8.8.8.8">
+          <div class="grid-2" style="margin-top:14px;">
+            <div>
+              <label for="sni">SNI SSL (optionnel)</label>
+              <input type="text" id="sni" name="sni" placeholder="domain.com" class="mono">
+            </div>
+            <div>
+              <label for="proxyHost">Proxy HTTP distant (optionnel)</label>
+              <input type="text" id="proxyHost" name="proxyHost" placeholder="104.16.0.1:80" class="mono">
+            </div>
           </div>
         </div>
 
-        <!-- UDP Settings -->
-        <div id="udpFields" style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px; display:none;">
-          <h3 style="font-size:15px; margin-bottom:12px;">Paramètres UDP Custom</h3>
-          <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:16px;">
+        <!-- UDP Custom Settings -->
+        <div id="udpFields" style="display:none; margin-top:16px; border-top:1px solid var(--border); padding-top:14px;">
+          <h3 style="font-size:13px; font-weight:600; margin-bottom:12px; color:var(--muted);">PARAMÈTRES UDP CUSTOM</h3>
+          <div class="grid-3">
             <div>
-              <label for="udp_server">Serveur UDP (IP ou domaine)</label>
-              <input type="text" id="udp_server" name="udp_server" placeholder="185.183.52.40">
+              <label for="udpServer">Serveur UDP (IP ou domaine)</label>
+              <input type="text" id="udpServer" name="udpServer" placeholder="vps.mydomain.com" class="mono">
             </div>
             <div>
-              <label for="udp_port">Port UDP</label>
-              <input type="number" id="udp_port" name="udp_port" value="7300">
+              <label for="udpPort">Port UDP</label>
+              <input type="number" id="udpPort" name="udpPort" value="36712" class="mono">
             </div>
             <div>
-              <label for="window">Window</label>
-              <input type="number" id="window" name="window" value="2">
+              <label for="udpAuthKey">Clé d'authentification UDP</label>
+              <input type="text" id="udpAuthKey" name="udpAuthKey" placeholder="clé secrète" class="mono">
             </div>
-          </div>
-
-          <div style="margin-top:12px;">
-            <label for="resolver">Résolveur</label>
-            <input type="text" id="resolver" name="resolver" value="127.0.0.1:7300">
           </div>
         </div>
 
-        <div style="margin-top:20px;">
-          <button type="submit" class="btn">Créer le profil</button>
+        <div style="margin-top:18px;">
+          <button type="submit" class="btn">
+            <i data-lucide="check" style="width:14px; height:14px;"></i> Enregistrer le profil
+          </button>
         </div>
       </form>
     </div>
-  </div>
+
+  </main>
 </div>
 
 <script>
 function toggleProfileType(val) {
-  document.getElementById('sshFields').style.display = val === 'ssh' ? 'block' : 'none';
-  document.getElementById('udpFields').style.display = val === 'udp' ? 'block' : 'none';
+  var sshDiv = document.getElementById('sshFields');
+  var udpDiv = document.getElementById('udpFields');
+  if (val === 'udp') {
+    sshDiv.style.display = 'none';
+    udpDiv.style.display = 'block';
+  } else {
+    sshDiv.style.display = 'block';
+    udpDiv.style.display = 'none';
+  }
 }
 </script>
 </body>

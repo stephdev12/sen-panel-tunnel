@@ -1,60 +1,82 @@
-<%- include('../partials/head', { title: t('system.title') + ' — NOVA XTUNNEL' }) %>
+<%- include('../partials/head', { title: t('system.title') + ' — SEN PANEL TUNNEL' }) %>
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title"><%= t('system.title') %></h1>
         <p class="page-sub"><%= t('system.subtitle') %></p>
       </div>
+      <div class="user-chip">
+        <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
+        <span><%= t('common.connected_as') %> <b><%= username %></b></span>
+      </div>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
-    <!-- ---- Server info ---- -->
+    <!-- Server info -->
     <div class="panel">
       <div class="panel-head">
-        <h2><%= t('system.info_title') %></h2>
+        <h2><i data-lucide="server"></i> <%= t('system.info_title') %></h2>
       </div>
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="stat-label"><%= t('system.info.os') %></div>
+          <div class="stat-header">
+            <span class="stat-label"><%= t('system.info.os') %></span>
+            <i data-lucide="cpu" class="stat-icon"></i>
+          </div>
           <div class="stat-value" style="font-size:15px;"><%= osName %></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label"><%= t('system.info.ip') %></div>
+          <div class="stat-header">
+            <span class="stat-label"><%= t('system.info.ip') %></span>
+            <i data-lucide="globe" class="stat-icon"></i>
+          </div>
           <div class="stat-value mono" style="font-size:15px;"><%= serverIp %></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label"><%= t('system.info.uptime') %></div>
+          <div class="stat-header">
+            <span class="stat-label"><%= t('system.info.uptime') %></span>
+            <i data-lucide="clock" class="stat-icon"></i>
+          </div>
           <div class="stat-value" style="font-size:15px;"><%= uptime %></div>
         </div>
       </div>
     </div>
 
-    <!-- ---- Traffic Monitor ---- -->
+    <!-- Traffic Monitor -->
     <div class="panel">
       <div class="panel-head">
-        <h2><%= t('system.traffic_title') %></h2>
+        <h2><i data-lucide="activity"></i> <%= t('system.traffic_title') %></h2>
       </div>
       <% if (!iface) { %>
-        <p class="muted"><%= t('system.traffic.no_interface') %></p>
+        <p class="dim"><%= t('system.traffic.no_interface') %></p>
       <% } else { %>
-        <p class="muted" style="margin-bottom:14px;"><%= t('system.traffic.interface') %>: <span class="mono"><%= iface %></span></p>
+        <p class="dim" style="margin-bottom:14px;">Interface détectée : <span class="mono" style="color:var(--text);"><%= iface %></span></p>
         <div class="stat-grid" style="margin-bottom:10px;">
           <div class="stat-card">
-            <div class="stat-label">⬇️ <%= t('system.traffic.download') %></div>
-            <div class="stat-value" id="traffic-rx-rate">—</div>
+            <div class="stat-header">
+              <span class="stat-label"><%= t('system.traffic.download') %></span>
+              <i data-lucide="arrow-down-circle" class="stat-icon" style="color:var(--accent);"></i>
+            </div>
+            <div class="stat-value mono" id="traffic-rx-rate">—</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">⬆️ <%= t('system.traffic.upload') %></div>
-            <div class="stat-value" id="traffic-tx-rate">—</div>
+            <div class="stat-header">
+              <span class="stat-label"><%= t('system.traffic.upload') %></span>
+              <i data-lucide="arrow-up-circle" class="stat-icon" style="color:var(--success);"></i>
+            </div>
+            <div class="stat-value mono" id="traffic-tx-rate">—</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label"><%= t('system.traffic.total_since_boot') %></div>
-            <div class="stat-value" style="font-size:14px;" id="traffic-totals">
+            <div class="stat-header">
+              <span class="stat-label"><%= t('system.traffic.total_since_boot') %></span>
+              <i data-lucide="database" class="stat-icon"></i>
+            </div>
+            <div class="stat-value mono" style="font-size:14px;" id="traffic-totals">
               ⬇️ <%= totals.rx != null ? (Math.round(totals.rx / 1024 / 1024)) + ' MB' : '—' %>
               &nbsp;/&nbsp;
               ⬆️ <%= totals.tx != null ? (Math.round(totals.tx / 1024 / 1024)) + ' MB' : '—' %>
@@ -62,76 +84,91 @@
           </div>
         </div>
         <% if (!vnstatInstalled) { %>
-          <p class="muted"><%= t('system.traffic.vnstat_hint') %></p>
+          <p class="dim"><%= t('system.traffic.vnstat_hint') %></p>
         <% } %>
       <% } %>
     </div>
 
-    <!-- ---- Block Torrent ---- -->
+    <!-- Block Torrent -->
     <div class="panel">
       <div class="panel-head">
-        <h2><%= t('system.torrent_title') %></h2>
+        <h2><i data-lucide="shield"></i> <%= t('system.torrent_title') %></h2>
       </div>
-      <p class="muted" style="margin-bottom:14px;"><%= t('system.torrent.description') %></p>
+      <p class="dim" style="margin-bottom:14px;"><%= t('system.torrent.description') %></p>
       <div style="display:flex; align-items:center; gap:14px;">
         <span class="pill <%= torrentBlockEnabled ? 'active' : 'deleted' %>">
           <%= torrentBlockEnabled ? t('system.torrent.enabled') : t('system.torrent.disabled') %>
         </span>
-        <form method="POST" action="/admin/system/torrent-block">
+        <form method="POST" action="/admin/system/torrent-block" style="margin:0;">
           <input type="hidden" name="enabled" value="<%= torrentBlockEnabled ? '0' : '1' %>">
           <button type="submit" class="btn small <%= torrentBlockEnabled ? 'danger' : '' %>">
+            <i data-lucide="<%= torrentBlockEnabled ? 'unlock' : 'lock' %>" style="width:13px; height:13px;"></i>
             <%= torrentBlockEnabled ? t('system.torrent.disable') : t('system.torrent.enable') %>
           </button>
         </form>
       </div>
     </div>
 
-    <!-- ---- Protocols (read-only status) ---- -->
+    <!-- Protocols -->
     <div class="panel">
       <div class="panel-head">
-        <h2><%= t('system.protocols_title') %></h2>
+        <h2><i data-lucide="layers"></i> <%= t('system.protocols_title') %></h2>
       </div>
-      <p class="muted" style="margin-bottom:14px;"><%= t('system.protocols.description') %></p>
+      <p class="dim" style="margin-bottom:14px;"><%= t('system.protocols.description') %></p>
       <div class="protocol-grid">
         <% protocols.forEach((p) => { %>
           <div class="protocol-card">
             <div class="protocol-card-name"><%= p.label %></div>
-            <div class="protocol-card-status <%= p.active ? 'active' : 'inactive' %>">
+            <div class="pill <%= p.active ? 'active' : 'deleted' %>">
               <%= p.active ? t('system.protocols.active') : t('system.protocols.inactive') %>
             </div>
           </div>
         <% }) %>
       </div>
     </div>
-  </div>
+
+  </main>
 </div>
 
 <script>
-  // Live traffic rate, polled every 2s
   (function () {
-    var rxEl = document.getElementById('traffic-rx-rate');
-    var txEl = document.getElementById('traffic-tx-rate');
-    var totalsEl = document.getElementById('traffic-totals');
-    if (!rxEl) return;
+    const rxEl = document.getElementById('traffic-rx-rate');
+    const txEl = document.getElementById('traffic-tx-rate');
+    const totalsEl = document.getElementById('traffic-totals');
+    if (!rxEl || !txEl) return;
 
     function fmtRate(bps) {
-      var kbps = bps / 1024;
-      if (kbps >= 1024) return (kbps / 1024).toFixed(2) + ' MB/s';
-      return Math.round(kbps) + ' KB/s';
+      if (bps == null || isNaN(bps)) return '—';
+      if (bps < 1024) return bps + ' B/s';
+      if (bps < 1024 * 1024) return (bps / 1024).toFixed(1) + ' KB/s';
+      if (bps < 1024 * 1024 * 1024) return (bps / 1024 / 1024).toFixed(2) + ' MB/s';
+      return (bps / 1024 / 1024 / 1024).toFixed(2) + ' GB/s';
     }
 
-    function poll() {
-      fetch('/admin/system/traffic').then(function (r) { return r.json(); }).then(function (data) {
-        if (!data || data.error || !data.rate) return;
-        rxEl.textContent = fmtRate(data.rate.rxBps);
-        txEl.textContent = fmtRate(data.rate.txBps);
-        if (totalsEl && data.totals) {
-          totalsEl.innerHTML = '⬇️ ' + Math.round(data.totals.rx / 1024 / 1024) + ' MB &nbsp;/&nbsp; ⬆️ ' + Math.round(data.totals.tx / 1024 / 1024) + ' MB';
-        }
-      }).catch(function () {});
+    function fmtTotal(bytes) {
+      if (bytes == null || isNaN(bytes)) return '—';
+      const mb = Math.round(bytes / 1024 / 1024);
+      if (mb < 1024) return mb + ' MB';
+      return (mb / 1024).toFixed(2) + ' GB';
     }
+
+    async function poll() {
+      try {
+        const res = await fetch('/admin/system/traffic');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.rates) {
+          rxEl.textContent = fmtRate(data.rates.rxRateBps);
+          txEl.textContent = fmtRate(data.rates.txRateBps);
+        }
+        if (data.totals && totalsEl) {
+          totalsEl.textContent = '⬇️ ' + fmtTotal(data.totals.rx) + ' / ⬆️ ' + fmtTotal(data.totals.tx);
+        }
+      } catch (e) {}
+    }
+
+    setInterval(poll, 3000);
     poll();
-    setInterval(poll, 2000);
   })();
 </script>
 </body>

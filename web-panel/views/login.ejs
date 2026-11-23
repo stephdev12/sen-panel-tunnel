@@ -2,38 +2,44 @@
 <div class="login-shell">
   <div class="login-card">
     <div class="brand">
-      <svg class="pulse-mark" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="15" cy="15" r="3" fill="#22D3EE"/>
-        <circle cx="15" cy="15" r="3" stroke="#7C5CFF" stroke-width="1.5" fill="none"/>
-        <circle cx="15" cy="15" r="3" stroke="#22D3EE" stroke-width="1.2" fill="none"/>
-      </svg>
-      SEN PANEL TUNNEL
+      <span class="brand-dot"></span>
+      <span class="brand-text">SEN PANEL TUNNEL</span>
     </div>
     <p class="login-sub"><%= t('login.subtitle') %></p>
 
-    <div style="text-align:center; margin: -10px 0 16px; font-size: 12.5px;">
-      <a href="/lang/fr" style="color: <%= lang === 'fr' ? 'var(--text)' : 'var(--muted)' %>; font-weight: <%= lang === 'fr' ? '700' : '500' %>;">FR</a>
-      <span style="color: var(--border);"> · </span>
-      <a href="/lang/en" style="color: <%= lang === 'en' ? 'var(--text)' : 'var(--muted)' %>; font-weight: <%= lang === 'en' ? '700' : '500' %>;">EN</a>
+    <div style="display:flex; justify-content:center; gap:8px; margin: -10px 0 20px; font-size: 12px;">
+      <a href="/lang/fr" class="dim" style="<%= lang === 'fr' ? 'color:var(--text); font-weight:700;' : '' %>">FR</a>
+      <span class="dim">·</span>
+      <a href="/lang/en" class="dim" style="<%= lang === 'en' ? 'color:var(--text); font-weight:700;' : '' %>">EN</a>
     </div>
 
     <% if (error) { %>
-      <div class="alert error"><%= error %></div>
+      <div class="alert error">
+        <i data-lucide="alert-circle"></i>
+        <span><%= error %></span>
+      </div>
     <% } %>
 
     <form method="POST" action="/login">
-      <label for="username"><%= t('login.username') %></label>
-      <input type="text" id="username" name="username" required autofocus autocomplete="username">
+      <div>
+        <label for="username"><%= t('login.username') %></label>
+        <input type="text" id="username" name="username" required autofocus autocomplete="username">
+      </div>
 
-      <label for="password"><%= t('login.password') %></label>
-      <input type="password" id="password" name="password" required autocomplete="current-password">
+      <div style="margin-top:12px;">
+        <label for="password"><%= t('login.password') %></label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
 
-      <button class="btn" type="submit" style="width:100%;"><%= t('login.submit') %></button>
+      <button class="btn" type="submit" style="width:100%; margin-top:20px; height:40px;">
+        <i data-lucide="log-in" style="width:15px; height:15px;"></i> <%= t('login.submit') %>
+      </button>
     </form>
 
     <div class="login-footer">
-      SEN PANEL TUNNEL v<%= typeof version !== 'undefined' ? version : '2.0' %>
-      · <a href="/about" target="_blank" rel="noopener"><%= t('nav.about') %></a>
+      <span>SEN PANEL TUNNEL v<%= typeof version !== 'undefined' ? version : '2.0' %></span>
+      <span> · </span>
+      <a href="/about" target="_blank" rel="noopener"><%= t('nav.about') %></a>
     </div>
   </div>
 </div>

@@ -51,8 +51,29 @@ router.post('/users/:username/reset-quota', (req, res) => {
   try {
     const { username } = req.params;
     system.resetSshUsage(username);
-    audit.log(actorFrom(req), 'reset_ssh_quota', `Reset quota for user ${username}`);
-    res.redirect('/admin?success=' + encodeURIComponent(`Quota réinitialisé pour ${username}.`));
+    try { system.unlockSshUser(username); } catch {}
+
+    const today = new Date().toISOString().slice(0, 10);
+    const client = db.prepare('SELECT * FROM clients WHERE identifier = ? AND deleted = 0').get(username);
+    if (client) {
+      const isDateExpired = client.expiry_date && client.expiry_date < today;
+      if (client.status === 'locked_expired' && !isDateExpired) {
+        db.prepare("UPDATE clients SET status = 'active' WHERE id = ?").run(client.id);
+      }
+    }
+
+    const appAcc = db.prepare('SELECT * FROM app_accounts WHERE username = ?').get(username);
+    if (appAcc && (appAcc.state === 'expired' || appAcc.state === 'quota_exceeded')) {
+      const isDateExpired = appAcc.expiry_date && appAcc.expiry_date < today;
+      if (!isDateExpired) {
+        db.prepare("UPDATE app_accounts SET state = 'active' WHERE id = ?").run(appAcc.id);
+      }
+    }
+
+    audit.log(actorFrom(req), 'reset_ssh_quota', `Trafic remis à zéro pour l'utilisateur ${username}`);
+    const back = req.header('Referer') || '/admin';
+    const sep = back.includes('?') ? '&' : '?';
+    res.redirect(back + sep + 'success=' + encodeURIComponent(`Trafic réinitialisé à zéro pour ${username}.`));
   } catch (e) {
     res.redirect('/admin?error=' + encodeURIComponent(e.message));
   }

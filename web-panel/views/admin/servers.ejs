@@ -2,11 +2,11 @@
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
-  <div class="main">
+  <main class="main">
     <div class="topbar">
       <div>
         <h1 class="page-title">Gestion des Serveurs & Nœuds</h1>
-        <p class="page-sub">Gérez votre serveur maître et référencez vos serveurs secondaires pour l'application Surfeo.</p>
+        <p class="page-sub">Gérez votre infrastructure de serveurs maîtres et nœuds secondaires pour l'application Surfeo.</p>
       </div>
       <div class="user-chip">
         <div class="avatar"><%= (username || '?').charAt(0).toUpperCase() %></div>
@@ -14,15 +14,18 @@
       </div>
     </div>
 
-    <% if (error) { %><div class="alert error"><%= error %></div><% } %>
-    <% if (success) { %><div class="alert success"><%= success %></div><% } %>
+    <% if (error) { %><div class="alert error"><i data-lucide="alert-circle"></i> <%= error %></div><% } %>
+    <% if (success) { %><div class="alert success"><i data-lucide="check-circle"></i> <%= success %></div><% } %>
 
     <div class="panel">
       <div class="panel-head">
-        <h2>Serveurs répertoriés (<%= servers.length %>)</h2>
+        <h2><i data-lucide="server"></i> Nœuds répertoriés (<%= servers.length %>)</h2>
       </div>
       <% if (servers.length === 0) { %>
-        <div class="empty-state">Aucun serveur configuré. Ajoutez votre premier serveur ci-dessous.</div>
+        <div class="empty-state">
+          <i data-lucide="server" style="width:36px; height:36px; opacity:0.3; margin-bottom:8px;"></i>
+          <div>Aucun serveur configuré. Ajoutez votre premier serveur ci-dessous.</div>
+        </div>
       <% } else { %>
       <div class="table-scroll">
         <table>
@@ -31,10 +34,10 @@
               <th>Rôle</th>
               <th>Code</th>
               <th>Nom du serveur</th>
-              <th>URL de l'API / Panel</th>
+              <th>URL de l'API / Nœud</th>
               <th>Statut</th>
               <th>Ajouté le</th>
-              <th>Actions</th>
+              <th style="text-align:right;">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -42,31 +45,35 @@
             <tr>
               <td>
                 <% if (s.is_master) { %>
-                  <span class="pill active" style="background:rgba(34,211,238,0.2); color:var(--accent); border:1px solid var(--accent); font-weight:bold;">👑 MAÎTRE</span>
+                  <span class="pill active" style="font-weight:700;">MAÎTRE</span>
                 <% } else { %>
-                  <span class="pill" style="background:rgba(124,92,255,0.15); color:var(--violet);">NŒUD</span>
+                  <span class="pill" style="color:var(--accent);">NŒUD</span>
                 <% } %>
               </td>
-              <td><code class="mono" style="font-weight:bold; color:var(--accent);"><%= s.code %></code></td>
+              <td><code class="mono" style="font-weight:700; color:var(--accent);"><%= s.code %></code></td>
               <td><b><%= s.name %></b></td>
-              <td><code class="mono" style="font-size:12px;"><%= s.api_url %></code></td>
+              <td><code class="mono dim" style="font-size:12px;"><%= s.api_url %></code></td>
               <td>
-                <span class="pill <%= s.is_active ? 'active' : 'locked_expired' %>">
+                <span class="pill <%= s.is_active ? 'active' : 'deleted' %>">
                   <%= s.is_active ? 'Actif' : 'Inactif' %>
                 </span>
               </td>
-              <td class="mono" style="font-size:12px;"><%= s.created_at ? s.created_at.slice(0, 10) : '-' %></td>
-              <td>
-                <div style="display:flex; gap:6px;">
+              <td class="mono dim" style="font-size:12px;"><%= s.created_at ? s.created_at.slice(0, 10) : '-' %></td>
+              <td class="actions-cell">
+                <div class="action-strip">
                   <% if (!s.is_master) { %>
-                    <form method="POST" action="/admin/servers/<%= s.id %>/toggle">
-                      <button type="submit" class="btn small subtle"><%= s.is_active ? 'Désactiver' : 'Activer' %></button>
+                    <form method="POST" action="/admin/servers/<%= s.id %>/toggle" class="inline">
+                      <button type="submit" class="icon-btn <%= s.is_active ? '' : 'action-success' %>" title="<%= s.is_active ? 'Désactiver' : 'Activer' %>">
+                        <i data-lucide="<%= s.is_active ? 'power-off' : 'power' %>"></i>
+                      </button>
                     </form>
-                    <form method="POST" action="/admin/servers/<%= s.id %>/delete" onsubmit="return confirm('Supprimer ce serveur de la liste ?');">
-                      <button type="submit" class="btn small error">Suppr</button>
+                    <form method="POST" action="/admin/servers/<%= s.id %>/delete" class="inline" onsubmit="return confirm('Supprimer ce serveur de la liste ?');">
+                      <button type="submit" class="icon-btn action-danger" title="Supprimer">
+                        <i data-lucide="trash-2"></i>
+                      </button>
                     </form>
                   <% } else { %>
-                    <span style="font-size:11px; color:var(--muted); padding:4px 6px;">Serveur racine</span>
+                    <span class="dim" style="font-size:11px; padding:4px 8px;">Racine</span>
                   <% } %>
                 </div>
               </td>
@@ -81,37 +88,35 @@
     <!-- Add Server Form -->
     <div class="panel">
       <div class="panel-head">
-        <h2>Ajouter un nouveau serveur / nœud</h2>
+        <h2><i data-lucide="plus-circle"></i> Ajouter un serveur / nœud</h2>
       </div>
-      <form method="POST" action="/admin/servers/create" style="padding:16px;">
-        <div style="display:grid; grid-template-columns: 1fr 2fr 3fr; gap:16px;">
+      <form method="POST" action="/admin/servers/create">
+        <div class="grid-3">
           <div>
-            <label for="code">Code serveur (clé)</label>
-            <input type="text" id="code" name="code" required placeholder="ex: FR1, DE1, SN2" style="text-transform:uppercase;">
-            <small style="color:var(--muted); font-size:11px;">Préfixe utilisé dans les clés d'activation.</small>
+            <label for="code">Code serveur (Clé)</label>
+            <input type="text" id="code" name="code" required placeholder="ex: FR1, DE1, SN2" style="text-transform:uppercase;" class="mono">
+            <span class="dim" style="display:block; margin-top:3px;">Préfixe utilisé dans les clés</span>
           </div>
           <div>
             <label for="name">Nom descriptif</label>
             <input type="text" id="name" name="name" required placeholder="ex: Serveur France #1">
           </div>
           <div>
-            <label for="api_url">URL de l'API / Panel</label>
-            <input type="url" id="api_url" name="api_url" required placeholder="ex: https://fr1.domain.com:2045">
-            <small style="color:var(--muted); font-size:11px;">URL HTTPS complète accessible depuis l'app.</small>
+            <label for="api_url">URL de l'API / Nœud</label>
+            <input type="url" id="api_url" name="api_url" required placeholder="ex: https://fr1.domain.com:2045" class="mono">
+            <span class="dim" style="display:block; margin-top:3px;">URL HTTPS complète joignable</span>
           </div>
         </div>
 
-        <div style="margin-top:16px; display:flex; justify-content:flex-end;">
-          <button type="submit" class="btn primary">Enregistrer le serveur</button>
+        <div style="margin-top:18px;">
+          <button type="submit" class="btn">
+            <i data-lucide="plus" style="width:14px; height:14px;"></i> Ajouter le serveur
+          </button>
         </div>
       </form>
     </div>
 
-    <div class="panel" style="padding:16px; background:rgba(34,211,238,0.05); border:1px solid rgba(34,211,238,0.2);">
-      <h3 style="color:var(--accent); margin-top:0; font-size:14px;">💡 Comment fonctionne la synchronisation multi-serveurs ?</h3>
-      <p style="font-size:12px; color:var(--text); line-height:1.6; margin-bottom:0;">
-        Ce serveur maître est la référence centrale. Lorsqu'un utilisateur appuie sur le bouton de rafraîchissement en haut de l'application <b>Surfeo</b>, l'application interroge ce serveur maître pour récupérer la liste de tous les serveurs actifs et leurs URL respectives. Les clés d'activation contenant le code correspondant (ex: <code>SURF-FR1-XXXX...</code>) se connecteront directement au bon serveur.
-      </p>
-    </div>
-  </div>
+  </main>
 </div>
+</body>
+</html>
