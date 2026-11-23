@@ -190,14 +190,18 @@ echo " Admin user         : $ADMIN_USER"
 echo "=================================================="
 echo
 
-# ---------- 1. Node.js ----------
-if ! command -v node >/dev/null 2>&1; then
-  echo "📦 Setting up Node.js 20..."
+# ---------- 1. Node.js & npm ----------
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "📦 Setting up Node.js 20 & npm..."
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt-get install -y nodejs
-else
-  echo "✅ Node.js already installed ($(node -v))"
 fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "📦 Setting up npm..."
+  apt-get install -y npm
+fi
+echo "✅ Node.js installed ($(node -v))"
+echo "✅ npm installed ($(npm -v))"
 
 # ---------- 2. Certbot & dig (+ Nginx only if that mode was chosen) ----------
 apt-get update -y

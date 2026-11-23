@@ -45,6 +45,9 @@ echo "=========================================================="
 echo " [3/5] Vérification des dépendances..."
 echo "=========================================================="
 cd "$INSTALL_DIR/web-panel"
+if ! command -v npm >/dev/null 2>&1; then
+  apt-get update -y && apt-get install -y npm || true
+fi
 npm install --omit=dev --silent 2>/dev/null || true
 
 echo "=========================================================="

@@ -92,20 +92,29 @@ apt-get install -y \
     ca-certificates \
     curl \
     nginx \
-    nodejs \
     certbot \
     ufw \
     iptables \
     openssl
 
-# Installer Node.js si trop vieux ou absent
-if ! command -v node >/dev/null 2>&1; then
-    info "Installation de Node.js 20..."
+# Vérification et installation de Node.js et npm
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    info "Configuration de Node.js 20 et npm via NodeSource..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
 fi
 
+# Sécurité supplémentaire : si npm n'est toujours pas disponible, l'installer directement via apt
+if ! command -v npm >/dev/null 2>&1; then
+    info "Installation du paquet npm via apt..."
+    apt-get install -y npm
+fi
+
+command -v node >/dev/null 2>&1 || error "Node.js est introuvable."
+command -v npm >/dev/null 2>&1 || error "npm est introuvable."
+
 info "Node.js version : $(node --version)"
+info "npm version     : $(npm --version)"
 
 # ================= APPLICATION SETUP =================
 
