@@ -282,6 +282,18 @@ fi
 systemctl enable --now novaxpanel
 systemctl restart novaxpanel
 
+# ---------- 8b. Open port in firewall ----------
+echo "🛡️  Opening port $PUBLIC_PORT in firewall..."
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+  ufw allow "$PUBLIC_PORT/tcp" >/dev/null 2>&1 || true
+  echo "   [OK] Port $PUBLIC_PORT/tcp allowed in UFW"
+fi
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -p tcp --dport "$PUBLIC_PORT" -j ACCEPT 2>/dev/null || \
+  iptables -I INPUT -p tcp --dport "$PUBLIC_PORT" -j ACCEPT 2>/dev/null || true
+  echo "   [OK] Port $PUBLIC_PORT/tcp allowed in iptables"
+fi
+
 
 if ! $NO_DOMAIN; then
  

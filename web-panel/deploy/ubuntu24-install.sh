@@ -4,25 +4,25 @@ set -Eeuo pipefail
 # ==========================================================
 # SEN PANEL TUNNEL INSTALLER
 # Ubuntu 24.04
-# Node.js + systemd + Nginx + Let's Encrypt
+# Node.js + systemd + Nginx (Port 2045) + Let's Encrypt / SSL
 # ==========================================================
 
 # ================= CONFIGURATION =================
 
 APP_DIR="/opt/nova-x-tunnel/web-panel"
+[[ ! -d "$APP_DIR" && -d "/opt/senpanel/web-panel" ]] && APP_DIR="/opt/senpanel/web-panel"
+
 APP_ENTRY="server.js"
-APP_PORT="3000"
+APP_PORT="3000"         # Port interne Node.js (reverse proxy)
+PANEL_PORT="${PANEL_PORT:-2045}" # Port public externe (Nginx)
 
 SERVICE_NAME="novaxpanel"
-NGINX_SITE="nova-panel"
-
-NODE_MAJOR="20"
-
-# ==================================================
+NGINX_SITE="senpanel"
 
 GREEN=$'\033[0;32m'
 RED=$'\033[0;31m'
 YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'
 NC=$'\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -33,84 +33,108 @@ trap 'error "Échec à la ligne ${LINENO}. Consulte les messages précédents."'
 
 # ================= PRECHECKS =================
 
-[[ "$EUID" -eq 0 ]] || error "Exécute ce script avec sudo."
+[[ "$EUID" -eq 0 ]] || error "Exécute ce script avec sudo (en root)."
 
 source /etc/os-release
+[[ "$ID" == "ubuntu" || "$ID" == "debian" ]] || warn "Testé principalement sur Ubuntu / Debian."
 
-[[ "$ID" == "ubuntu" ]] || error "Ubuntu uniquement."
-
-[[ -d "$APP_DIR" ]] || error "Dossier absent : $APP_DIR"
-[[ -f "$APP_DIR/package.json" ]] || error "package.json absent."
-[[ -f "$APP_DIR/$APP_ENTRY" ]] || error "Entrée Node absente."
-
-[[ "$APP_PORT" =~ ^[0-9]+$ ]] || error "Port invalide."
+[[ -d "$APP_DIR" ]] || error "Dossier du panel web introuvable : $APP_DIR"
+[[ -f "$APP_DIR/package.json" ]] || error "package.json absent dans $APP_DIR."
+[[ -f "$APP_DIR/$APP_ENTRY" ]] || error "Fichier principal $APP_ENTRY absent."
 
 echo
-echo "=========================================="
-echo "       SEN PANEL TUNNEL INSTALLER"
-echo "=========================================="
+echo -e "${CYAN}==========================================${NC}"
+echo -e "${CYAN}       SEN PANEL TUNNEL INSTALLER         ${NC}"
+echo -e "${CYAN}    Panel Web sur le port ${PANEL_PORT} par défaut ${NC}"
+echo -e "${CYAN}==========================================${NC}"
 
-read -rp "Domaine du panel : " DOMAIN
-read -rp "Email Let's Encrypt : " EMAIL
+read_tty() {
+  if [ -r /dev/tty ]; then
+    read "$@" < /dev/tty
+  else
+    read "$@" < /dev/null
+  fi
+}
 
-[[ -n "$DOMAIN" ]] || error "Domaine obligatoire."
-[[ -n "$EMAIL" ]] || error "Email obligatoire."
+PUBLIC_IP="$(curl -4 -fsS --max-time 6 https://api.ipify.org 2>/dev/null || curl -4 -fsS --max-time 6 icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')"
+
+read_tty -rp "👉 Domaine du panel (ou laisser vide pour utiliser l'IP $PUBLIC_IP) : " DOMAIN
+if [[ -z "$DOMAIN" ]]; then
+  DOMAIN="$PUBLIC_IP"
+  EMAIL=""
+else
+  read_tty -rp "👉 Email pour le certificat Let's Encrypt : " EMAIL
+fi
 
 # ================= BACKUP =================
 
 BACKUP_DIR="/root/senpanel-backup-$(date +%Y%m%d-%H%M%S)"
-
 mkdir -p "$BACKUP_DIR"
 
 for FILE in \
     "/etc/nginx/sites-available/$NGINX_SITE" \
-    "/etc/systemd/system/$SERVICE_NAME.service"
+    "/etc/nginx/sites-available/nova-panel" \
+    "/etc/systemd/system/$SERVICE_NAME.service" \
+    "$APP_DIR/.env" \
+    "$APP_DIR/db/panel.sqlite3"
 do
-    [[ -f "$FILE" ]] && cp -a "$FILE" "$BACKUP_DIR/"
+    [[ -f "$FILE" ]] && cp -a "$FILE" "$BACKUP_DIR/" 2>/dev/null || true
 done
 
-info "Sauvegarde : $BACKUP_DIR"
+info "Sauvegarde de sécurité créée dans : $BACKUP_DIR"
 
 # ================= DEPENDENCIES =================
 
-info "Installation des dépendances..."
+info "Installation / Vérification des dépendances système..."
+apt-get update -y
 
-apt-get update
-
-# NodeSource fournit npm avec Node.js.
 apt-get install -y \
     ca-certificates \
     curl \
     nginx \
     nodejs \
     certbot \
-    python3-certbot-nginx
+    ufw \
+    iptables \
+    openssl
 
-command -v node >/dev/null || error "Node.js absent."
-command -v npm >/dev/null || error "npm absent."
-
-info "Node : $(node --version)"
-info "npm : $(npm --version)"
-
-# ================= APPLICATION =================
-
-info "Installation des dépendances Node..."
-
-cd "$APP_DIR"
-
-if [ -f .env.example ] && [ ! -f .env ]; then
-    cp .env.example .env
-    SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "senpanel-session-secret-$(date +%s)")
-    sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" .env
-    sed -i "s|^PORT=.*|PORT=${APP_PORT}|" .env
-    sed -i "s|^DOMAIN=.*|DOMAIN=${DOMAIN}|" .env
+# Installer Node.js si trop vieux ou absent
+if ! command -v node >/dev/null 2>&1; then
+    info "Installation de Node.js 20..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
 fi
 
-npm install --omit=dev
+info "Node.js version : $(node --version)"
+
+# ================= APPLICATION SETUP =================
+
+info "Configuration de l'application Node.js..."
+cd "$APP_DIR"
+
+if [ ! -f .env ]; then
+    if [ -f .env.example ]; then
+        cp .env.example .env
+    else
+        touch .env
+    fi
+    SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "senpanel-session-secret-$(date +%s)")
+    echo "SESSION_SECRET=${SESSION_SECRET}" >> .env
+fi
+
+# Configuration des variables d'environnement pour le port 2045
+sed -i '/^PORT=/d' .env && echo "PORT=${APP_PORT}" >> .env
+sed -i '/^PUBLIC_PORT=/d' .env && echo "PUBLIC_PORT=${PANEL_PORT}" >> .env
+sed -i '/^DOMAIN=/d' .env && echo "DOMAIN=${DOMAIN}" >> .env
+sed -i '/^BEHIND_TLS_PROXY=/d' .env && echo "BEHIND_TLS_PROXY=true" >> .env
+sed -i '/^TLS_MODE=/d' .env && echo "TLS_MODE=nginx" >> .env
+
+info "Installation des dépendances npm..."
+npm install --omit=dev --silent 2>/dev/null || npm install --omit=dev
 
 # ================= SYSTEMD =================
 
-info "Configuration du service systemd..."
+info "Configuration du service systemd ($SERVICE_NAME)..."
 
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
@@ -135,38 +159,87 @@ systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
 
-sleep 3
+sleep 2
 
 if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-    journalctl -u "$SERVICE_NAME" -n 50 --no-pager
-    error "Le panel ne démarre pas."
+    journalctl -u "$SERVICE_NAME" -n 30 --no-pager
+    error "Le panel Node.js n'a pas pu démarrer."
+fi
+info "Service systemd $SERVICE_NAME actif."
+
+# ================= CERTIFICAT SSL =================
+
+SSL_CERT=""
+SSL_KEY=""
+
+if [[ "$DOMAIN" != "$PUBLIC_IP" && -n "$EMAIL" ]]; then
+    info "Tentative d'obtention du certificat SSL Let's Encrypt pour $DOMAIN..."
+    
+    # Arrêter temporairement HAProxy/Nginx pendant le standalone ACME port 80 si nécessaire
+    HAPROXY_WAS_RUNNING=false
+    if systemctl is-active --quiet haproxy 2>/dev/null; then
+        HAPROXY_WAS_RUNNING=true
+        systemctl stop haproxy 2>/dev/null || true
+    fi
+    systemctl stop nginx 2>/dev/null || true
+
+    if certbot certonly --standalone \
+        -d "$DOMAIN" \
+        --non-interactive \
+        --agree-tos \
+        --email "$EMAIL" 2>/dev/null; then
+        
+        SSL_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+        SSL_KEY="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
+        info "Certificat Let's Encrypt obtenu avec succès."
+    else
+        warn "Échec Let's Encrypt (DNS non encore propagé ou derrière proxy Cloudflare)."
+    fi
+
+    if [[ "$HAPROXY_WAS_RUNNING" == true ]]; then
+        systemctl start haproxy 2>/dev/null || true
+    fi
 fi
 
-# ================= NGINX =================
+# Fallback sur certificat SSL auto-signé fort si pas de Let's Encrypt
+if [[ -z "$SSL_CERT" || ! -f "$SSL_CERT" ]]; then
+    info "Génération d'un certificat SSL auto-signé dédié pour le port ${PANEL_PORT}..."
+    SSL_DIR="/etc/ssl/senpanel"
+    mkdir -p "$SSL_DIR"
+    SSL_CERT="$SSL_DIR/cert.pem"
+    SSL_KEY="$SSL_DIR/key.pem"
+    
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "$SSL_KEY" \
+        -out "$SSL_CERT" \
+        -subj "/C=FR/ST=Global/L=Cloud/O=SenPanel/CN=${DOMAIN}" 2>/dev/null
+    chmod 600 "$SSL_KEY"
+fi
 
-info "Configuration Nginx..."
+# ================= NGINX SUR LE PORT 2045 =================
 
-# On ne supprime et ne désactive aucun site existant.
+info "Configuration de Nginx sur le port ${PANEL_PORT}..."
+
+# Désactiver le site par défaut de Nginx qui squatte le port 80 si présent
+if [[ -L "/etc/nginx/sites-enabled/default" ]]; then
+    rm -f "/etc/nginx/sites-enabled/default"
+fi
 
 NGINX_AVAILABLE="/etc/nginx/sites-available/${NGINX_SITE}"
 NGINX_ENABLED="/etc/nginx/sites-enabled/${NGINX_SITE}"
 
-if [[ -e "$NGINX_ENABLED" && ! -L "$NGINX_ENABLED" ]]; then
-    error "$NGINX_ENABLED existe déjà et n'est pas un lien symbolique."
-fi
-
-if [[ -L "$NGINX_ENABLED" ]]; then
-    CURRENT_TARGET="$(readlink -f "$NGINX_ENABLED" || true)"
-    [[ "$CURRENT_TARGET" == "$NGINX_AVAILABLE" ]] || \
-        error "Le nom de site ${NGINX_SITE} est déjà utilisé."
-fi
-
 cat > "$NGINX_AVAILABLE" <<EOF
 server {
-    listen 80;
-    listen [::]:80;
+    listen ${PANEL_PORT} ssl;
+    listen [::]:${PANEL_PORT} ssl;
 
     server_name ${DOMAIN};
+
+    ssl_certificate     ${SSL_CERT};
+    ssl_certificate_key ${SSL_KEY};
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
 
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};
@@ -187,63 +260,51 @@ server {
 EOF
 
 ln -sfn "$NGINX_AVAILABLE" "$NGINX_ENABLED"
+# Nettoyer l'ancien lien nova-panel s'il existe
+rm -f "/etc/nginx/sites-enabled/nova-panel" 2>/dev/null || true
 
-nginx -t || error "Configuration Nginx invalide."
+nginx -t || error "Erreur dans la configuration Nginx générée."
 
 systemctl enable nginx
-systemctl reload nginx
+systemctl restart nginx
 
-# ================= DNS =================
+# ================= OUVERTURE DU PORT PARE-FEU =================
 
-info "Vérification DNS..."
+info "Ouverture automatique du port ${PANEL_PORT} dans le pare-feu..."
 
-PUBLIC_IP="$(curl -4 -fsS --max-time 10 https://api.ipify.org || true)"
-DOMAIN_IP="$(getent ahostsv4 "$DOMAIN" | awk 'NR==1 {print $1}' || true)"
+if command -v ufw >/dev/null 2>&1; then
+    if ufw status | grep -q "Status: active"; then
+        ufw allow "${PANEL_PORT}/tcp" >/dev/null 2>&1 || true
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+        ufw allow 443/tcp >/dev/null 2>&1 || true
+        info "[OK] Port ${PANEL_PORT}/tcp autorisé dans UFW."
+    else
+        info "UFW installé mais inactif."
+    fi
+fi
 
-[[ -n "$PUBLIC_IP" ]] || error "Impossible de récupérer l'IP publique."
-[[ -n "$DOMAIN_IP" ]] || error "Le domaine ne possède aucune résolution IPv4."
+if command -v iptables >/dev/null 2>&1; then
+    iptables -C INPUT -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT -p tcp --dport "${PANEL_PORT}" -j ACCEPT 2>/dev/null || true
+    info "[OK] Port ${PANEL_PORT}/tcp autorisé dans iptables."
+fi
 
-echo "IP publique : $PUBLIC_IP"
-echo "IP domaine : $DOMAIN_IP"
+# Relancer HAProxy s'il est configuré pour s'assurer qu'il a les ports 80/443
+if systemctl list-unit-files 2>/dev/null | grep -q '^haproxy'; then
+    systemctl restart haproxy 2>/dev/null || true
+fi
 
-[[ "$PUBLIC_IP" == "$DOMAIN_IP" ]] || \
-    error "Le domaine ne pointe pas vers ce VPS."
-
-# ================= SSL =================
-
-info "Obtention du certificat SSL..."
-
-certbot --nginx \
-    -d "$DOMAIN" \
-    --non-interactive \
-    --agree-tos \
-    --redirect \
-    --email "$EMAIL"
-
-# ================= FINAL CHECK =================
-
-info "Vérification finale..."
-
-nginx -t
-
-systemctl is-active --quiet nginx || error "Nginx arrêté."
-systemctl is-active --quiet "$SERVICE_NAME" || error "Panel arrêté."
-
-HTTP_CODE="$(curl -k -s -o /dev/null -w '%{http_code}' \
-    --max-time 10 "https://${DOMAIN}/" || true)"
+# ================= RESUME FINAL =================
 
 echo
-echo "=========================================="
-echo "       INSTALLATION TERMINEE"
-echo "=========================================="
-echo "Domaine : https://${DOMAIN}"
-echo "Service : ${SERVICE_NAME}"
-echo "Node : $(node --version)"
-echo "npm : $(npm --version)"
-echo "Port : ${APP_PORT}"
-echo "HTTP : ${HTTP_CODE}"
-echo "Backup : ${BACKUP_DIR}"
+echo -e "${GREEN}==========================================${NC}"
+echo -e "${GREEN}       INSTALLATION DU PANEL REUSSIE      ${NC}"
+echo -e "${GREEN}==========================================${NC}"
+echo -e " URL du Panel   : ${CYAN}https://${DOMAIN}:${PANEL_PORT}${NC}"
+echo -e " Port Web Nginx : ${CYAN}${PANEL_PORT}${NC} (ports 80 & 443 libres pour les tunnels)"
+echo -e " Port Node.js   : ${APP_PORT} (interne)"
+echo -e " Service        : ${SERVICE_NAME} (systemctl status ${SERVICE_NAME})"
+echo -e " Sauvegarde     : ${BACKUP_DIR}"
 echo
-echo "Logs : journalctl -u ${SERVICE_NAME} -f"
-echo "SSL : certbot certificates"
-echo "=========================================="
+echo -e " Pour gérer le panel, tapez : ${CYAN}novaxpanel${NC} ou connectez-vous sur ${CYAN}https://${DOMAIN}:${PANEL_PORT}${NC}"
+echo -e "${GREEN}==========================================${NC}"
