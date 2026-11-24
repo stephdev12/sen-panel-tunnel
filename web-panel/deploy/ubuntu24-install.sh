@@ -288,10 +288,15 @@ rm -f "/etc/nginx/conf.d/default.conf" 2>/dev/null || true
 NGINX_AVAILABLE="/etc/nginx/sites-available/${NGINX_SITE}"
 NGINX_ENABLED="/etc/nginx/sites-enabled/${NGINX_SITE}"
 
+IPV6_DIRECTIVE=""
+if [ -f /proc/net/if_inet6 ]; then
+    IPV6_DIRECTIVE="listen [::]:${PANEL_PORT} ssl default_server;"
+fi
+
 cat > "$NGINX_AVAILABLE" <<EOF
 server {
     listen ${PANEL_PORT} ssl default_server;
-    listen [::]:${PANEL_PORT} ssl default_server;
+    ${IPV6_DIRECTIVE}
 
     server_name ${DOMAIN} _ localhost "";
 
@@ -372,13 +377,24 @@ fi
 
 # ================= VERIFICATION DE FONCTIONNEMENT =================
 
-info "Vérification locale de l'accessibilité du panel..."
-sleep 2
+info "Vérification locale de l'accessibilité du panel (attente du démarrage)..."
+PANEL_READY=false
+for i in {1..8}; do
+    if curl -k -fsS "https://127.0.0.1:${PANEL_PORT}/login" >/dev/null 2>&1 || curl -k -s "https://127.0.0.1:${PANEL_PORT}/" | grep -qi "login\|html"; then
+        PANEL_READY=true
+        break
+    fi
+    sleep 1
+done
 
-if curl -k -fsS "https://127.0.0.1:${PANEL_PORT}/login" >/dev/null 2>&1 || curl -k -s "https://127.0.0.1:${PANEL_PORT}/" | grep -qi "login\|html"; then
+if [[ "$PANEL_READY" == true ]]; then
     info "[OK] Le panel répond correctement sur https://127.0.0.1:${PANEL_PORT}"
 else
-    warn "Le test local immédiat n'a pas répondu. Vérifiez avec 'systemctl status $SERVICE_NAME' et 'systemctl status nginx'."
+    warn "Le test local immédiat n'a pas répondu. Diagnostic automatique :"
+    echo -e "${CYAN}--- État de $SERVICE_NAME ---${NC}"
+    systemctl status "$SERVICE_NAME" --no-pager -n 10 2>/dev/null || true
+    echo -e "${CYAN}--- État de nginx ---${NC}"
+    systemctl status nginx --no-pager -n 10 2>/dev/null || true
 fi
 
 # ================= RESUME FINAL =================
