@@ -1,6 +1,6 @@
 server {
     listen __PUBLIC_PORT__ ssl default_server;
-    listen [::]:__PUBLIC_PORT__ ssl default_server;
+    listen [::]:__PUBLIC_PORT__ ssl default_server ipv6only=on;
     server_name __DOMAIN__ _ localhost "";
 
     ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;

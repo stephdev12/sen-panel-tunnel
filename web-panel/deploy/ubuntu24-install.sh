@@ -289,16 +289,15 @@ NGINX_AVAILABLE="/etc/nginx/sites-available/${NGINX_SITE}"
 NGINX_ENABLED="/etc/nginx/sites-enabled/${NGINX_SITE}"
 
 IPV6_DIRECTIVE=""
-if [ -f /proc/net/if_inet6 ]; then
-    IPV6_DIRECTIVE="listen [::]:${PANEL_PORT} ssl default_server;"
+if [ -f /proc/net/if_inet6 ] && ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
+    IPV6_DIRECTIVE="listen [::]:${PANEL_PORT} ssl default_server ipv6only=on;"
 fi
 
-cat > "$NGINX_AVAILABLE" <<EOF
-server {
+NGINX_CONF_CONTENT="server {
     listen ${PANEL_PORT} ssl default_server;
     ${IPV6_DIRECTIVE}
 
-    server_name ${DOMAIN} _ localhost "";
+    server_name ${DOMAIN} _ localhost \"\";
 
     ssl_certificate     ${SSL_CERT};
     ssl_certificate_key ${SSL_KEY};
@@ -322,21 +321,40 @@ server {
         proxy_set_header X-Forwarded-Proto https;
 
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \"upgrade\";
 
         proxy_read_timeout 300s;
         proxy_send_timeout 300s;
     }
-}
-EOF
+}"
 
-ln -sfn "$NGINX_AVAILABLE" "$NGINX_ENABLED"
+# Déterminer si Nginx charge sites-enabled ou uniquement conf.d
+if grep -q "sites-enabled" /etc/nginx/nginx.conf 2>/dev/null; then
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    echo "$NGINX_CONF_CONTENT" > "/etc/nginx/sites-available/${NGINX_SITE}"
+    ln -sfn "/etc/nginx/sites-available/${NGINX_SITE}" "/etc/nginx/sites-enabled/${NGINX_SITE}"
+    rm -f "/etc/nginx/conf.d/${NGINX_SITE}.conf" 2>/dev/null || true
+else
+    mkdir -p /etc/nginx/conf.d
+    echo "$NGINX_CONF_CONTENT" > "/etc/nginx/conf.d/${NGINX_SITE}.conf"
+    rm -f "/etc/nginx/sites-enabled/${NGINX_SITE}" 2>/dev/null || true
+fi
 
 nginx -t || error "Erreur dans la configuration Nginx générée."
 
 systemctl enable nginx
 systemctl restart nginx
 systemctl restart "$SERVICE_NAME"
+
+# Double vérification : si Nginx n'écoute toujours pas sur le port PANEL_PORT, forcer dans conf.d
+sleep 1
+if ! ss -tulpn 2>/dev/null | grep -q ":${PANEL_PORT} "; then
+    warn "Port ${PANEL_PORT} non détecté via sites-enabled. Tentative d'activation via /etc/nginx/conf.d/${NGINX_SITE}.conf..."
+    mkdir -p /etc/nginx/conf.d
+    echo "$NGINX_CONF_CONTENT" > "/etc/nginx/conf.d/${NGINX_SITE}.conf"
+    rm -f "/etc/nginx/sites-enabled/${NGINX_SITE}" 2>/dev/null || true
+    nginx -t && systemctl restart nginx || true
+fi
 
 # ================= OUVERTURE DU PORT PARE-FEU =================
 
