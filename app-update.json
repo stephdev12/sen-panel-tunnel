@@ -1,0 +1,8 @@
+{
+  "versionCode": 7,
+  "versionName": "1.7.0",
+  "title": "Mise à jour Surfeo v1.7.0 disponible !",
+  "changelog": "• Partage VPN Hotspot Proxy : partagez votre tunnel chiffré avec vos PC, consoles et autres smartphones via Wi-Fi\n• Communautés officielles : Rejoignez nos canaux Telegram et WhatsApp\n• Système de mise à jour à distance\n• Améliorations de performance et stabilité",
+  "downloadUrl": "https://github.com/stephdev12/surfeo/releases/latest",
+  "forceUpdate": false
+}
