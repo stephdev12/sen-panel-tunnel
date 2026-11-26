@@ -4627,10 +4627,19 @@ generate_client_config() {
 
     # 2. HAProxy edge stack
     if systemctl is-active --quiet haproxy; then
-        echo -e "\n🔹 ${C_BOLD}HAProxy Edge Stack${C_RESET}:"
+        local wspath="/sen"
+        if [[ -f /etc/novaxtunnel/wspath ]]; then
+            wspath=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+        elif [[ -f /opt/nova-x-tunnel/web-panel/.env ]]; then
+            wspath=$(grep "^WS_PATH=" /opt/nova-x-tunnel/web-panel/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+        fi
+        wspath="${wspath:-/sen}"
+        echo -e "\n🔹 ${C_BOLD}HAProxy Edge Stack (WebSocket / SSH)${C_RESET}:"
         echo -e "   • Host: $host_domain"
-        echo -e "   • Port 80: HTTP payloads / raw SSH"
-        echo -e "   • Port 443: TLS / SNI / SSL payloads"
+        echo -e "   • Port 80: HTTP WebSocket / Raw SSH"
+        echo -e "   • Port 443: TLS / SNI / SSL WebSocket"
+        echo -e "   • WebSocket Path: ${C_YELLOW}${wspath}${C_RESET}"
+        echo -e "   • Payload HTTP : ${C_GREEN}GET ${wspath} HTTP/1.1[crlf]Host: ${host_domain}[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]${C_RESET}"
         echo -e "   • SNI (BugHost): $host_domain (or your preferred SNI)"
     elif systemctl is-active --quiet nginx; then
         echo -e "\n🔹 ${C_BOLD}Internal Nginx Proxy${C_RESET}:"

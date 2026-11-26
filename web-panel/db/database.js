@@ -203,6 +203,7 @@ if (adminCount === 0) {
 }
 
 // Seed initial default connection profiles if none exist
+const defaultWsPath = process.env.WS_PATH || '/sen';
 const profileCount = db.prepare('SELECT COUNT(*) AS c FROM connection_profiles').get().c;
 if (profileCount === 0) {
   const defaultSshParams = {
@@ -210,7 +211,7 @@ if (profileCount === 0) {
     port: 80,
     tls: false,
     sni: null,
-    payload: 'GET /sen HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]',
+    payload: `GET ${defaultWsPath} HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]`,
     proxy: { enabled: false, host: null, port: null },
     udpgwPort: 7300,
     dns: ['1.1.1.1', '8.8.8.8']

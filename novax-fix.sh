@@ -21,7 +21,24 @@ set -uo pipefail
 
 PANEL_PORT="${PANEL_PORT:-2045}"
 WS_PORT="${WS_PORT:-444}"
-TEST_PATH="${TEST_PATH:-/sen}"
+
+# Détection et configuration du chemin WebSocket personnalisé
+WS_PATH="${WS_PATH:-}"
+if [[ -z "$WS_PATH" && -f /etc/novaxtunnel/wspath ]]; then
+    WS_PATH=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+fi
+if [[ -z "$WS_PATH" && -f /opt/nova-x-tunnel/web-panel/.env ]]; then
+    WS_PATH=$(grep "^WS_PATH=" /opt/nova-x-tunnel/web-panel/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+fi
+if [[ -z "$WS_PATH" && -r /dev/tty ]]; then
+    read -r -p "👉 Chemin WebSocket personnalisé (ex: /sen, /tieme, /jean) [/sen]: " WS_PATH < /dev/tty || true
+fi
+WS_PATH="${WS_PATH:-/sen}"
+[[ "$WS_PATH" =~ ^/ ]] || WS_PATH="/$WS_PATH"
+mkdir -p /etc/novaxtunnel
+echo "$WS_PATH" > /etc/novaxtunnel/wspath
+TEST_PATH="$WS_PATH"
+
 RESET_USAGE=0
 [[ "${1:-}" == "--reset-usage" ]] && RESET_USAGE=1
 

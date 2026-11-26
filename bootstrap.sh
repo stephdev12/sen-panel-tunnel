@@ -47,6 +47,28 @@ else
   bash terminal-panel/install.sh
 fi
 
+# ---------- Configuration du chemin WebSocket (ex: /sen, /tieme, /jean) ----------
+DEFAULT_WS_PATH="/sen"
+if [ -f /etc/novaxtunnel/wspath ]; then
+  DEFAULT_WS_PATH=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+  DEFAULT_WS_PATH="${DEFAULT_WS_PATH:-/sen}"
+elif [ -f "$INSTALL_DIR/web-panel/.env" ]; then
+  DEFAULT_WS_PATH=$(grep "^WS_PATH=" "$INSTALL_DIR/web-panel/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+  DEFAULT_WS_PATH="${DEFAULT_WS_PATH:-/sen}"
+fi
+
+if [ -r /dev/tty ]; then
+  read -r -p "👉 Chemin WebSocket personnalisé (ex: /sen, /tieme, /jean) [$DEFAULT_WS_PATH]: " USER_WS_PATH < /dev/tty
+  USER_WS_PATH="${USER_WS_PATH:-$DEFAULT_WS_PATH}"
+else
+  USER_WS_PATH="$DEFAULT_WS_PATH"
+fi
+[[ "$USER_WS_PATH" =~ ^/ ]] || USER_WS_PATH="/$USER_WS_PATH"
+mkdir -p /etc/novaxtunnel
+echo "$USER_WS_PATH" > /etc/novaxtunnel/wspath
+export WS_PATH="$USER_WS_PATH"
+echo "🌐 Chemin WebSocket configuré : $WS_PATH"
+
 # ---------- 3. Panel web (optionnel) ----------
 if [ -r /dev/tty ]; then
   read -r -p "👉 Install/update the web panel too? (y/n): " DO_WEB < /dev/tty

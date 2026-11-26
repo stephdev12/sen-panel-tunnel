@@ -249,6 +249,46 @@ cmd_change_admin_password() {
   sep_short
 }
 
+cmd_change_wspath() {
+  sep_double
+  print_header "                    CHANGE WEBSOCKET PATH"
+  sep_double
+  local current
+  current=$(env_get WS_PATH)
+  [[ -z "$current" && -f /etc/novaxtunnel/wspath ]] && current=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+  current="${current:-/sen}"
+  echo -e "${C_WHITE}Current WebSocket path :${NC} ${C_YELLOW}$current${NC}"
+  read -r -p "$(echo -e "${C_GREEN}👉 New path (e.g., /sen, /tieme, /jean) [$current]: ${NC}")" new_path
+  new_path="${new_path:-$current}"
+  [[ "$new_path" =~ ^/ ]] || new_path="/$new_path"
+  env_set WS_PATH "$new_path"
+  mkdir -p /etc/novaxtunnel
+  echo "$new_path" > /etc/novaxtunnel/wspath
+
+  if [[ -f "$PROJECT_DIR/db/panel.sqlite3" ]]; then
+    node -e "
+    try {
+      const Database = require('better-sqlite3');
+      const db = new Database('$PROJECT_DIR/db/panel.sqlite3');
+      const profiles = db.prepare('SELECT id, params FROM connection_profiles WHERE type = \"ssh\"').all();
+      for (const p of profiles) {
+        try {
+          const params = JSON.parse(p.params);
+          if (params.payload && params.payload.includes('Upgrade: websocket')) {
+            params.payload = params.payload.replace(/GET \/[^ ]+ HTTP\/1\.1/, 'GET ' + process.argv[1] + ' HTTP/1.1');
+            db.prepare('UPDATE connection_profiles SET params = ? WHERE id = ?').run(JSON.stringify(params), p.id);
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
+    " "$new_path" 2>/dev/null || true
+  fi
+
+  restart_panel
+  print_success "WebSocket path updated to: $new_path"
+  sep_short
+}
+
 cmd_regen_secret() {
   sep_double
   print_header "                    REGENERATE SESSION SECRET"
@@ -442,12 +482,13 @@ show_menu() {
   echo -e "  ${BOLD}${C_RED}5)${NC} ${C_WHITE}Change domain name${NC}"
   echo -e "  ${BOLD}${C_RED}6)${NC} ${C_WHITE}Change ports (public / internal)${NC}"
   echo -e "  ${BOLD}${C_RED}7)${NC} ${C_WHITE}Switch Nginx <-> Node direct (TLS mode)${NC}"
-  echo -e "  ${BOLD}${C_RED}8)${NC} ${C_WHITE}Change admin username${NC}"
-  echo -e "  ${BOLD}${C_RED}9)${NC} ${C_WHITE}Change admin password${NC}"
-  echo -e " ${BOLD}${C_RED}10)${NC} ${C_WHITE}Regenerate session secret${NC}"
-  echo -e " ${BOLD}${C_RED}11)${NC} ${C_WHITE}Backup${NC}"
-  echo -e " ${BOLD}${C_RED}12)${NC} ${C_WHITE}Restore backup${NC}"
-  echo -e " ${BOLD}${C_RED}13)${NC} ${C_RED}Uninstall web panel${NC}"
+  echo -e "  ${BOLD}${C_RED}8)${NC} ${C_WHITE}Change WebSocket path (ex: /sen, /tieme, /jean)${NC}"
+  echo -e "  ${BOLD}${C_RED}9)${NC} ${C_WHITE}Change admin username${NC}"
+  echo -e " ${BOLD}${C_RED}10)${NC} ${C_WHITE}Change admin password${NC}"
+  echo -e " ${BOLD}${C_RED}11)${NC} ${C_WHITE}Regenerate session secret${NC}"
+  echo -e " ${BOLD}${C_RED}12)${NC} ${C_WHITE}Backup${NC}"
+  echo -e " ${BOLD}${C_RED}13)${NC} ${C_WHITE}Restore backup${NC}"
+  echo -e " ${BOLD}${C_RED}14)${NC} ${C_RED}Uninstall web panel${NC}"
   echo -e "  ${BOLD}${C_RED}0)${NC} ${C_WHITE}Quit${NC}"
   sep_double
   read -r -p "$(echo -e "${C_GREEN}Choice: ${NC}")" choice
@@ -459,12 +500,13 @@ show_menu() {
     5) cmd_change_domain ;;
     6) cmd_change_port ;;
     7) cmd_tls_mode ;;
-    8) cmd_change_admin_username ;;
-    9) cmd_change_admin_password ;;
-    10) cmd_regen_secret ;;
-    11) cmd_backup ;;
-    12) cmd_restore ;;
-    13) cmd_uninstall; exit 0 ;;
+    8) cmd_change_wspath ;;
+    9) cmd_change_admin_username ;;
+    10) cmd_change_admin_password ;;
+    11) cmd_regen_secret ;;
+    12) cmd_backup ;;
+    13) cmd_restore ;;
+    14) cmd_uninstall; exit 0 ;;
     0) exit 0 ;;
     *) print_error "Invalid choice." ;;
   esac
@@ -480,6 +522,7 @@ case "$1" in
   domain) cmd_change_domain ;;
   port) cmd_change_port ;;
   tls-mode) cmd_tls_mode ;;
+  wspath|ws-path) cmd_change_wspath ;;
   admin-user) cmd_change_admin_username ;;
   admin-pass) cmd_change_admin_password ;;
   secret) cmd_regen_secret ;;
@@ -495,7 +538,7 @@ case "$1" in
   *)
     print_error "Unknown command: $1"
     sep_short
-    echo -e "${C_WHITE}Usage:${NC} novaxpanel [status|logs|restart|update|domain|port|tls-mode|admin-user|admin-pass|secret|backup|restore|uninstall]"
+    echo -e "${C_WHITE}Usage:${NC} novaxpanel [status|logs|restart|update|domain|port|tls-mode|wspath|admin-user|admin-pass|secret|backup|restore|uninstall]"
     sep_short
     exit 1
     ;;

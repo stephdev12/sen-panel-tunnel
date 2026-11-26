@@ -145,7 +145,7 @@ function buildConfigPayload(profile, appAccount) {
         sni: parsedParams.sni || null,
         username: appAccount.username,
         password: userEntry.password || appAccount.password || '',
-        payload: parsedParams.payload || 'GET /sen HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]',
+        payload: parsedParams.payload || `GET ${process.env.WS_PATH || '/sen'} HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]`,
         proxy: parsedParams.proxy || { enabled: false, host: null, port: null },
         udpgwPort: parseInt(parsedParams.udpgwPort, 10) || 7300,
         dns: Array.isArray(parsedParams.dns) ? parsedParams.dns : ['1.1.1.1', '8.8.8.8']

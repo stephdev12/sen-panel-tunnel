@@ -21,7 +21,24 @@ set -uo pipefail
 
 PANEL_PORT="${PANEL_PORT:-2045}"
 WS_PORT="${WS_PORT:-444}"
-TEST_PATH="${TEST_PATH:-/sen}"
+
+# Détection et configuration du chemin WebSocket personnalisé
+WS_PATH="${WS_PATH:-}"
+if [[ -z "$WS_PATH" && -f /etc/novaxtunnel/wspath ]]; then
+    WS_PATH=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+fi
+if [[ -z "$WS_PATH" && -f /opt/nova-x-tunnel/web-panel/.env ]]; then
+    WS_PATH=$(grep "^WS_PATH=" /opt/nova-x-tunnel/web-panel/.env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')
+fi
+if [[ -z "$WS_PATH" && -r /dev/tty ]]; then
+    read -r -p "👉 Chemin WebSocket personnalisé (ex: /sen, /tieme, /jean) [/sen]: " WS_PATH < /dev/tty || true
+fi
+WS_PATH="${WS_PATH:-/sen}"
+[[ "$WS_PATH" =~ ^/ ]] || WS_PATH="/$WS_PATH"
+mkdir -p /etc/novaxtunnel
+echo "$WS_PATH" > /etc/novaxtunnel/wspath
+TEST_PATH="$WS_PATH"
+
 RESET_USAGE=0
 [[ "${1:-}" == "--reset-usage" ]] && RESET_USAGE=1
 
@@ -296,6 +313,33 @@ systemctl reload ssh &>/dev/null || systemctl reload sshd &>/dev/null || true
 for s in pyproxy-ws pyproxy-socks haproxy; do
     systemctl cat "$s" &>/dev/null && systemctl restart "$s" &>/dev/null || true
 done
+
+# Synchronisation du chemin WebSocket avec le panel web si installé
+WEB_DIR="/opt/nova-x-tunnel/web-panel"
+if [[ -f "$WEB_DIR/.env" ]]; then
+    sed -i '/^WS_PATH=/d' "$WEB_DIR/.env"
+    echo "WS_PATH=${WS_PATH}" >> "$WEB_DIR/.env"
+    if [[ -f "$WEB_DIR/db/panel.sqlite3" ]] && command -v node &>/dev/null; then
+        node -e "
+        try {
+            const Database = require('better-sqlite3');
+            const db = new Database('$WEB_DIR/db/panel.sqlite3');
+            const profiles = db.prepare('SELECT id, params FROM connection_profiles WHERE type = \"ssh\"').all();
+            for (const p of profiles) {
+                try {
+                    const params = JSON.parse(p.params);
+                    if (params.payload && params.payload.includes('Upgrade: websocket')) {
+                        params.payload = params.payload.replace(/GET \/[^ ]+ HTTP\/1\.1/, 'GET ' + process.argv[1] + ' HTTP/1.1');
+                        db.prepare('UPDATE connection_profiles SET params = ? WHERE id = ?').run(JSON.stringify(params), p.id);
+                    }
+                } catch(e) {}
+            }
+        } catch(e) {}
+        " "$WS_PATH" 2>/dev/null || true
+    fi
+    systemctl is-active --quiet novaxpanel && systemctl restart novaxpanel &>/dev/null || true
+fi
+
 sleep 1
 ok "Services rechargés"
 

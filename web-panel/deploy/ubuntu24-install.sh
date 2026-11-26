@@ -99,6 +99,20 @@ while true; do
   break
 done
 
+# Configuration du chemin WebSocket personnalisé (ex: /sen, /tieme, /jean)
+DEFAULT_WS_PATH="${WS_PATH:-}"
+if [[ -z "$DEFAULT_WS_PATH" && -f /etc/novaxtunnel/wspath ]]; then
+  DEFAULT_WS_PATH=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+fi
+DEFAULT_WS_PATH="${DEFAULT_WS_PATH:-/sen}"
+
+read_tty -rp "👉 Chemin WebSocket personnalisé (ex: /sen, /tieme, /jean) [$DEFAULT_WS_PATH] : " WS_PATH_INPUT
+WS_PATH="${WS_PATH_INPUT:-$DEFAULT_WS_PATH}"
+[[ "$WS_PATH" =~ ^/ ]] || WS_PATH="/$WS_PATH"
+mkdir -p /etc/novaxtunnel
+echo "$WS_PATH" > /etc/novaxtunnel/wspath
+info "Chemin WebSocket retenu : $WS_PATH"
+
 # ================= BACKUP =================
 
 BACKUP_DIR="/root/senpanel-backup-$(date +%Y%m%d-%H%M%S)"
@@ -174,12 +188,33 @@ sed -i '/^BEHIND_TLS_PROXY=/d' .env && echo "BEHIND_TLS_PROXY=true" >> .env
 sed -i '/^TLS_MODE=/d' .env && echo "TLS_MODE=nginx" >> .env
 sed -i '/^DEFAULT_ADMIN_USER=/d' .env && echo "DEFAULT_ADMIN_USER=${ADMIN_USER}" >> .env
 sed -i '/^DEFAULT_ADMIN_PASS=/d' .env && echo "DEFAULT_ADMIN_PASS=${ADMIN_PASS}" >> .env
+sed -i '/^WS_PATH=/d' .env && echo "WS_PATH=${WS_PATH}" >> .env
 
 info "Installation des dépendances npm..."
 npm install --omit=dev --silent 2>/dev/null || npm install --omit=dev
 
 info "Configuration du compte administrateur ($ADMIN_USER)..."
 node "$APP_DIR/deploy/admin-tool.js" upsert "$ADMIN_USER" "$ADMIN_PASS"
+
+# Mise à jour des profils de connexion existants avec le chemin WebSocket
+if [[ -f "$APP_DIR/db/panel.sqlite3" ]]; then
+    node -e "
+    try {
+        const Database = require('better-sqlite3');
+        const db = new Database('$APP_DIR/db/panel.sqlite3');
+        const profiles = db.prepare('SELECT id, params FROM connection_profiles WHERE type = \"ssh\"').all();
+        for (const p of profiles) {
+            try {
+                const params = JSON.parse(p.params);
+                if (params.payload && params.payload.includes('Upgrade: websocket')) {
+                    params.payload = params.payload.replace(/GET \/[^ ]+ HTTP\/1\.1/, 'GET ' + process.argv[1] + ' HTTP/1.1');
+                    db.prepare('UPDATE connection_profiles SET params = ? WHERE id = ?').run(JSON.stringify(params), p.id);
+                }
+            } catch(e) {}
+        }
+    } catch(e) {}
+    " "$WS_PATH" 2>/dev/null || true
+fi
 
 # ================= SYSTEMD =================
 

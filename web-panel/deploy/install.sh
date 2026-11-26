@@ -40,6 +40,7 @@ TLS_MODE=""     # "nginx" | "node"
 ADMIN_USER=""
 ADMIN_PASS=""
 SECRET=""
+WS_PATH=""
 ASSUME_YES=false
 
 # ---------- Parse args (all optional -> falls back to interactive prompts) ----------
@@ -49,6 +50,7 @@ while [[ $# -gt 0 ]]; do
     --tls-mode) TLS_MODE="$2"; shift 2 ;;
     --port) PUBLIC_PORT="$2"; shift 2 ;;
     --app-port) APP_PORT="$2"; shift 2 ;;
+    --ws-path) WS_PATH="$2"; shift 2 ;;
     --admin-user) ADMIN_USER="$2"; shift 2 ;;
     --admin-pass) ADMIN_PASS="$2"; shift 2 ;;
     --secret) SECRET="$2"; shift 2 ;;
@@ -162,6 +164,17 @@ if [[ -z "$SECRET" ]]; then
   [[ -z "$SECRET" ]] && SECRET=$(openssl rand -hex 32)
 fi
 
+if [[ -z "$WS_PATH" ]]; then
+  DEFAULT_WS_PATH="/sen"
+  [[ -f /etc/novaxtunnel/wspath ]] && DEFAULT_WS_PATH=$(cat /etc/novaxtunnel/wspath 2>/dev/null | tr -d '[:space:]')
+  DEFAULT_WS_PATH="${DEFAULT_WS_PATH:-/sen}"
+  read_tty -r -p "👉 WebSocket path (e.g., /sen, /tieme, /jean) [$DEFAULT_WS_PATH]: " WS_PATH
+  WS_PATH="${WS_PATH:-$DEFAULT_WS_PATH}"
+fi
+[[ "$WS_PATH" =~ ^/ ]] || WS_PATH="/$WS_PATH"
+mkdir -p /etc/novaxtunnel
+echo "$WS_PATH" > /etc/novaxtunnel/wspath
+
 # sed treats '&', '\' and our chosen delimiter '|' specially inside the REPLACEMENT text
 # ('&' re-inserts the whole matched line, '\' escapes the next char). Any of these appearing
 # in a user-typed value (very common in a "strong" password) would silently corrupt what
@@ -225,6 +238,7 @@ sed -i "s|^DOMAIN=.*|DOMAIN=$DOMAIN_ESC|" .env
 sed -i "s|^PUBLIC_PORT=.*|PUBLIC_PORT=$PUBLIC_PORT|" .env
 sed -i "s|^DEFAULT_ADMIN_USER=.*|DEFAULT_ADMIN_USER=$ADMIN_USER_ESC|" .env
 sed -i "s|^DEFAULT_ADMIN_PASS=.*|DEFAULT_ADMIN_PASS=$ADMIN_PASS_ESC|" .env
+sed -i '/^WS_PATH=/d' .env && echo "WS_PATH=$WS_PATH" >> .env
 
 if [[ "$TLS_MODE" == "node" ]]; then
   sed -i "s|^BEHIND_TLS_PROXY=.*|BEHIND_TLS_PROXY=false|" .env
@@ -244,6 +258,26 @@ npm install --omit=dev
 
 echo "👤 Setting up admin account ($ADMIN_USER)..."
 node "$PROJECT_DIR/deploy/admin-tool.js" upsert "$ADMIN_USER" "$ADMIN_PASS"
+
+# Update existing connection profiles with WS_PATH
+if [[ -f "$PROJECT_DIR/db/panel.sqlite3" ]]; then
+  node -e "
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database('$PROJECT_DIR/db/panel.sqlite3');
+    const profiles = db.prepare('SELECT id, params FROM connection_profiles WHERE type = \"ssh\"').all();
+    for (const p of profiles) {
+      try {
+        const params = JSON.parse(p.params);
+        if (params.payload && params.payload.includes('Upgrade: websocket')) {
+          params.payload = params.payload.replace(/GET \/[^ ]+ HTTP\/1\.1/, 'GET ' + process.argv[1] + ' HTTP/1.1');
+          db.prepare('UPDATE connection_profiles SET params = ? WHERE id = ?').run(JSON.stringify(params), p.id);
+        }
+      } catch(e) {}
+    }
+  } catch(e) {}
+  " "$WS_PATH" 2>/dev/null || true
+fi
 
 
 echo "⚙️  Configuring systemd..."
