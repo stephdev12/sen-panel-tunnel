@@ -115,6 +115,10 @@ cmd_update() {
   print_info "📦 npm install..."
   cd web-panel 2>/dev/null || cd "$PROJECT_DIR"
   npm install --omit=dev
+  if [[ -f "$PROJECT_DIR/deploy/novaxpanel-cli.sh" ]]; then
+    sed -e "s|__PROJECT_DIR__|$PROJECT_DIR|g" "$PROJECT_DIR/deploy/novaxpanel-cli.sh" > /usr/local/bin/novaxpanel
+    chmod +x /usr/local/bin/novaxpanel
+  fi
   restart_panel
   sep_short
 }

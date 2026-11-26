@@ -37,6 +37,13 @@ echo "=========================================================="
 cd "$SCRIPT_DIR"
 npm install --omit=dev --silent 2>/dev/null || npm install --omit=dev
 
+# Mise à jour de la commande CLI novaxpanel
+if [ -f "$SCRIPT_DIR/deploy/novaxpanel-cli.sh" ]; then
+  sed -e "s|__PROJECT_DIR__|$SCRIPT_DIR|g" "$SCRIPT_DIR/deploy/novaxpanel-cli.sh" > /usr/local/bin/novaxpanel
+  chmod +x /usr/local/bin/novaxpanel
+  echo "[OK] Commande 'novaxpanel' mise à jour dans /usr/local/bin/novaxpanel"
+fi
+
 echo "=========================================================="
 echo " [4/4] Redémarrage du service..."
 echo "=========================================================="
